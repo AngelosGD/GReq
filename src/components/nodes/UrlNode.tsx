@@ -2,7 +2,7 @@ import { memo, useState } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import type { Node } from '@xyflow/react'
 
-type UrlNodeData = { url?: string }
+type UrlNodeData = { url?: string; title?: string }
 type UrlNodeType = Node<UrlNodeData>
 
 function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
@@ -50,6 +50,15 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
 
       {/* Inner content */}
       <div className="relative pl-6 pr-4 py-3.5">
+        {/* Title bar */}
+        {data.title && (
+          <div className="absolute -top-2.5 left-6 right-4 flex items-center gap-1.5">
+            <span className="text-[9px] font-bold text-zinc-700 bg-zinc-100/80 px-2 py-0.5 rounded-md truncate max-w-[180px]">
+              {data.title}
+            </span>
+            <div className="h-px flex-1 bg-zinc-100" />
+          </div>
+        )}
         {/* Accent bar */}
         <div
           className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full transition-all duration-300 ${
@@ -124,7 +133,18 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
         </div>
       </div>
 
-      {/* Source handle */}
+      {/* Target handle (left) — receives from method nodes */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="!w-3 !h-3 !border-[2.5px] !border-white !shadow-[0_2px_6px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.4)]"
+        style={{
+          top: '50%',
+          transform: 'translateY(-50%)',
+          background: 'linear-gradient(135deg, #34d399, #059669)',
+        }}
+      />
+      {/* Source handle (right) */}
       <Handle
         type="source"
         position={Position.Right}

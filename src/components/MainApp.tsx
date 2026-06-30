@@ -20,7 +20,9 @@ import { useFlowStore } from '../store/flowStore'
 import { invoke } from '@tauri-apps/api/core'
 import type { HttpMethod } from './nodes/MethodNode'
 import { palettes, methodLabels } from '../constants'
-import { useExecStore } from '../store/execStore'
+import { useExecStore, type StoredResponse } from '../store/execStore'
+import { resolveVariables } from '../utils/resolveVariables'
+import { NodeSearch } from './NodeSearch'
 
 type SidebarMode = 'options' | 'nodes'
 
@@ -133,6 +135,8 @@ export function MainApp() {
   const setLoading = useExecStore((s) => s.setLoading)
   const setExecuteFn = useExecStore((s) => s.setExecuteFn)
 
+  const setResponse = useExecStore((s) => s.setResponse)
+
   const executeNode = useCallback(async (nodeId: string) => {
     const methodNode = nodes.find((n) => n.id === nodeId)
     if (!methodNode) return
@@ -140,15 +144,32 @@ export function MainApp() {
     setLoading(nodeId, true)
 
     try {
-      const incomingEdges = edges.filter((e) => e.target === nodeId)
-      const sourceNode = incomingEdges.length > 0
-        ? nodes.find((n) => n.id === incomingEdges[0].source)
-        : null
+      // Walk backwards through edges to find previous method node
+      function findPrevMethod(currentId: string): string | undefined {
+        const incoming = edges.filter((e) => e.target === currentId)
+        for (const e of incoming) {
+          const source = nodes.find((n) => n.id === e.source)
+          if (source?.type === 'method') return source.id
+          if (source?.type === 'url') return findPrevMethod(source.id)
+        }
+        return undefined
+      }
+      const prevMethodId = findPrevMethod(nodeId)
 
+      // Collect all response references for variable resolution
+      const allResponses = useExecStore.getState().responses
+
+      // Resolve URL from source node
+      const methodIncomingEdges = edges.filter((e) => e.target === nodeId)
+      const sourceNode = methodIncomingEdges.length > 0
+        ? nodes.find((n) => n.id === methodIncomingEdges[0].source)
+        : null
       const sourceData = (sourceNode?.data as any) ?? {}
       const methodData = (methodNode.data as any) ?? {}
 
-      let url = (sourceData.url as string) || ''
+      let rawUrl = (sourceData.url as string) || ''
+      // Resolve variables first, then add http:// prefix if needed
+      let url = resolveVariables(rawUrl, allResponses, prevMethodId)
       if (!url.startsWith('http://') && !url.startsWith('https://') && url) {
         url = `http://${url}`
       }
@@ -157,46 +178,48 @@ export function MainApp() {
       if (params.length > 0) {
         const qs = params
           .filter((p) => p.key)
-          .map((p) => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`)
+          .map((p) => `${encodeURIComponent(resolveVariables(p.key, allResponses, prevMethodId))}=${encodeURIComponent(resolveVariables(p.value, allResponses, prevMethodId))}`)
           .join('&')
         if (qs) {
           url += (url.includes('?') ? '&' : '?') + qs
         }
       }
 
-      const response = await invoke<{
-        status: number
-        statusText: string
-        headers: { key: string; value: string }[]
-        body: string
-        durationMs: number
-      }>('make_request', {
+      const resolvedHeaders = (methodData.headers as { key: string; value: string }[] ?? []).map((h) => ({
+        key: resolveVariables(h.key, allResponses, prevMethodId),
+        value: resolveVariables(h.value, allResponses, prevMethodId),
+      }))
+      const resolvedBody = resolveVariables(methodData.body ?? '', allResponses, prevMethodId)
+      const resolvedAuthValue = resolveVariables(methodData.authValue ?? '', allResponses, prevMethodId)
+
+      const response = await invoke<StoredResponse>('make_request', {
         input: {
           url,
           method: methodData.method ?? 'GET',
-          headers: methodData.headers ?? [],
-          body: methodData.body ?? '',
+          headers: resolvedHeaders,
+          body: resolvedBody,
           bodyType: methodData.bodyType ?? 'json',
           authType: methodData.auth ?? 'None',
-          authValue: methodData.authValue ?? '',
+          authValue: resolvedAuthValue,
         },
       })
 
       setNodeData(nodeId, { response })
+      setResponse(nodeId, response)
     } catch (err) {
-      setNodeData(nodeId, {
-        response: {
-          status: 0,
-          statusText: 'Error',
-          headers: [],
-          body: String(err),
-          durationMs: 0,
-        },
-      })
+      const errResp: StoredResponse = {
+        status: 0,
+        statusText: 'Error',
+        headers: [],
+        body: String(err),
+        durationMs: 0,
+      }
+      setNodeData(nodeId, { response: errResp })
+      setResponse(nodeId, errResp)
     } finally {
       setLoading(nodeId, false)
     }
-  }, [nodes, edges, setNodeData, setLoading])
+  }, [nodes, edges, setNodeData, setLoading, setResponse])
 
   useEffect(() => {
     setExecuteFn(executeNode)
@@ -390,6 +413,7 @@ export function MainApp() {
               Cargar
             </button>
           </div>
+          <NodeSearch nodes={nodes} edges={edges} />
           <button
             onClick={goToSettings}
             className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 active:scale-95 transition-all"
@@ -718,6 +742,7 @@ function ConfigPanel({ node, setNodeData, onClose }: {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {isUrl && <UrlConfig node={node} setNodeData={setNodeData} />}
         {isMethod && <MethodConfig node={node} setNodeData={setNodeData} />}
+        {isMethod && <VariablesHint />}
         {(node.data as any)?.response && <ResponseSection node={node} setNodeData={setNodeData} />}
       </div>
     </aside>
@@ -773,9 +798,23 @@ function KeyValueEditor({ pairs, onChange, keyLabel, valueLabel }: {
 function UrlConfig({ node, setNodeData }: { node: Node; setNodeData: (id: string, data: Partial<any>) => void }) {
   const d = (node.data as any) ?? {}
   const [url, setUrl] = useState(d.url ?? '')
+  const [groupTitle, setGroupTitle] = useState(d.title ?? '')
 
   return (
     <div className="space-y-4">
+      <div>
+        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Nombre del grupo</label>
+        <input
+          value={groupTitle}
+          onChange={(e) => {
+            setGroupTitle(e.target.value)
+            setNodeData(node.id, { title: e.target.value })
+          }}
+          placeholder="e.g. Obtener usuario"
+          className="w-full bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-2 text-xs font-medium text-zinc-700 placeholder:text-zinc-400 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/15 transition-all"
+        />
+      </div>
+
       <div>
         <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">URL</label>
         <input
@@ -908,6 +947,41 @@ function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (id: str
             className="w-full bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-1.5 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400 transition-all"
           />
         )}
+      </div>
+    </div>
+  )
+}
+
+function VariablesHint() {
+  const responses = useExecStore((s) => s.responses)
+  const entries = Object.entries(responses)
+  if (entries.length === 0) return null
+
+  return (
+    <div className="space-y-2">
+      <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Variables disponibles</label>
+      <div className="space-y-1.5 max-h-40 overflow-y-auto">
+        {entries.map(([id, res]) => {
+          const isJson = res.body.startsWith('{') || res.body.startsWith('[')
+          return (
+            <details key={id} className="text-[10px]">
+              <summary className="cursor-pointer text-zinc-600 hover:text-zinc-800 font-medium">
+                {id.slice(0, 8)}
+                <span className="text-zinc-400 ml-1">({res.status})</span>
+              </summary>
+              <div className="mt-1 ml-2 space-y-0.5">
+                <code className="block text-zinc-500 font-mono text-[9px]">$prev.status</code>
+                <code className="block text-zinc-500 font-mono text-[9px]">$prev.headers.X-*</code>
+                {isJson && (
+                  <>
+                    <code className="block text-zinc-500 font-mono text-[9px]">$prev.body</code>
+                    <code className="block text-zinc-500 font-mono text-[9px]">$prev.body.path.to.field</code>
+                  </>
+                )}
+              </div>
+            </details>
+          )
+        })}
       </div>
     </div>
   )
