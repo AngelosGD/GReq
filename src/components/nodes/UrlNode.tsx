@@ -1,11 +1,12 @@
 import { memo, useState } from 'react'
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import type { Node } from '@xyflow/react'
 
 type UrlNodeData = { url?: string }
 type UrlNodeType = Node<UrlNodeData>
 
-function UrlNode({ data, selected }: NodeProps<UrlNodeType>) {
+function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
+  const { updateNodeData } = useReactFlow()
   const [url, setUrl] = useState(data.url ?? '')
   const [focused, setFocused] = useState(false)
 
@@ -98,7 +99,10 @@ function UrlNode({ data, selected }: NodeProps<UrlNodeType>) {
           </svg>
           <input
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
+            onChange={(e) => {
+              setUrl(e.target.value)
+              updateNodeData(id, { url: e.target.value })
+            }}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder="https://api.ejemplo.com"
@@ -106,7 +110,10 @@ function UrlNode({ data, selected }: NodeProps<UrlNodeType>) {
           />
           {url && (
             <button
-              onClick={() => setUrl('')}
+              onClick={() => {
+                setUrl('')
+                updateNodeData(id, { url: '' })
+              }}
               className="nodrag p-0.5 rounded hover:bg-zinc-100 text-zinc-300 hover:text-zinc-500 transition-colors"
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>

@@ -17,8 +17,10 @@ import { useAppStore } from '../store'
 import { nodeTypes } from './nodes'
 import { edgeTypes } from './edges'
 import { useFlowStore } from '../store/flowStore'
+import { invoke } from '@tauri-apps/api/core'
 import type { HttpMethod } from './nodes/MethodNode'
 import { palettes, methodLabels } from '../constants'
+import { useExecStore } from '../store/execStore'
 
 type SidebarMode = 'options' | 'nodes'
 
@@ -127,6 +129,79 @@ export function MainApp() {
   const setNodeData = useCallback((id: string, data: Partial<any>) => {
     setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...data } } : n)))
   }, [setNodes])
+
+  const setLoading = useExecStore((s) => s.setLoading)
+  const setExecuteFn = useExecStore((s) => s.setExecuteFn)
+
+  const executeNode = useCallback(async (nodeId: string) => {
+    const methodNode = nodes.find((n) => n.id === nodeId)
+    if (!methodNode) return
+
+    setLoading(nodeId, true)
+
+    try {
+      const incomingEdges = edges.filter((e) => e.target === nodeId)
+      const sourceNode = incomingEdges.length > 0
+        ? nodes.find((n) => n.id === incomingEdges[0].source)
+        : null
+
+      const sourceData = (sourceNode?.data as any) ?? {}
+      const methodData = (methodNode.data as any) ?? {}
+
+      let url = (sourceData.url as string) || ''
+      if (!url.startsWith('http://') && !url.startsWith('https://') && url) {
+        url = `http://${url}`
+      }
+
+      const params = (sourceData.params as { key: string; value: string }[]) ?? []
+      if (params.length > 0) {
+        const qs = params
+          .filter((p) => p.key)
+          .map((p) => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`)
+          .join('&')
+        if (qs) {
+          url += (url.includes('?') ? '&' : '?') + qs
+        }
+      }
+
+      const response = await invoke<{
+        status: number
+        statusText: string
+        headers: { key: string; value: string }[]
+        body: string
+        durationMs: number
+      }>('make_request', {
+        input: {
+          url,
+          method: methodData.method ?? 'GET',
+          headers: methodData.headers ?? [],
+          body: methodData.body ?? '',
+          bodyType: methodData.bodyType ?? 'json',
+          authType: methodData.auth ?? 'None',
+          authValue: methodData.authValue ?? '',
+        },
+      })
+
+      setNodeData(nodeId, { response })
+    } catch (err) {
+      setNodeData(nodeId, {
+        response: {
+          status: 0,
+          statusText: 'Error',
+          headers: [],
+          body: String(err),
+          durationMs: 0,
+        },
+      })
+    } finally {
+      setLoading(nodeId, false)
+    }
+  }, [nodes, edges, setNodeData, setLoading])
+
+  useEffect(() => {
+    setExecuteFn(executeNode)
+    return () => setExecuteFn(null)
+  }, [executeNode, setExecuteFn])
 
   const duplicateNode = useCallback((node: Node) => {
     takeSnapshot(nodes, edges)
@@ -429,6 +504,64 @@ export function MainApp() {
   )
 }
 
+function ResponseSection({ node, setNodeData }: { node: Node; setNodeData: (id: string, data: Partial<any>) => void }) {
+  const d = (node.data as any) ?? {}
+  const res = d.response
+  if (!res) return null
+
+  const statusColor =
+    res.status >= 200 && res.status < 300 ? 'text-emerald-500'
+    : res.status >= 300 && res.status < 400 ? 'text-amber-500'
+    : res.status >= 400 ? 'text-red-500'
+    : 'text-zinc-500'
+
+  return (
+    <div className="space-y-3 border-t border-zinc-100 pt-4">
+      <div className="flex items-center justify-between">
+        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em]">Respuesta</label>
+        <button
+          onClick={() => setNodeData(node.id, { response: undefined })}
+          className="text-[9px] text-zinc-400 hover:text-zinc-600 transition-colors"
+        >
+          Limpiar
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className={`text-xs font-bold ${statusColor}`}>
+          {res.status}
+        </span>
+        <span className="text-[10px] text-zinc-500">{res.statusText}</span>
+        <span className="text-[9px] text-zinc-400 ml-auto">{res.durationMs}ms</span>
+      </div>
+
+      <details className="group">
+        <summary className="text-[10px] font-medium text-zinc-500 cursor-pointer hover:text-zinc-700 transition-colors list-none flex items-center gap-1.5">
+          <svg className="w-3 h-3 text-zinc-400 group-open:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          Headers ({res.headers?.length ?? 0})
+        </summary>
+        <div className="mt-1.5 space-y-0.5 max-h-36 overflow-y-auto">
+          {(res.headers as { key: string; value: string }[] ?? []).map((h: any, i: number) => (
+            <div key={i} className="flex gap-2 text-[9px] font-mono">
+              <span className="text-zinc-500 shrink-0">{h.key}:</span>
+              <span className="text-zinc-700 break-all">{h.value}</span>
+            </div>
+          ))}
+        </div>
+      </details>
+
+      <div>
+        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Body</label>
+        <pre className="w-full max-h-60 overflow-auto bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-2 text-[10px] font-mono text-zinc-700 leading-relaxed whitespace-pre-wrap break-all">
+          {res.body}
+        </pre>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Premium mini node cards ─── */
 
 function NodeCard({ type, onAdd }: { type: string; onAdd: (type: string, pos?: { x: number; y: number }) => void }) {
@@ -585,6 +718,7 @@ function ConfigPanel({ node, setNodeData, onClose }: {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {isUrl && <UrlConfig node={node} setNodeData={setNodeData} />}
         {isMethod && <MethodConfig node={node} setNodeData={setNodeData} />}
+        {(node.data as any)?.response && <ResponseSection node={node} setNodeData={setNodeData} />}
       </div>
     </aside>
   )
@@ -766,6 +900,14 @@ function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (id: str
             </button>
           ))}
         </div>
+        {(d.auth === 'Basic' || d.auth === 'Bearer') && (
+          <input
+            value={d.authValue ?? ''}
+            onChange={(e) => setNodeData(node.id, { authValue: e.target.value })}
+            placeholder={d.auth === 'Bearer' ? 'Token' : 'usuario:contraseña'}
+            className="w-full bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-1.5 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400 transition-all"
+          />
+        )}
       </div>
     </div>
   )
