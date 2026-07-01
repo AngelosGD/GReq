@@ -22,10 +22,12 @@ npm run tauri build
 
 ## Features
 
-- Nodes visuales URL + Method (GET/POST/PUT/DELETE)
-- Ejecución real de requests HTTP via Rust (reqwest)
-- Encadenamiento de requests con variables `{{$prev.body.path}}`
-- Búsqueda y navegación de grupos con nombre
-- Undo/redo, guardar/cargar flujos JSON
-- Panel de configuración con headers, body, query params, auth
-- Vista de respuesta con status, headers y body
+- **Peticiones HTTP** — Nodos URL + Method (GET/POST/DELETE/UPDATE) arrastrables al canvas
+- **Variables dinámicas** — `{{$prev.body.path}}`, `{{$prev.headers.X}}`, `{{$prev.status}}`, `{{nodeId.body.path}}`
+- **Agrupación** — Nodos URL con nombre + métodos conectados, guardados en historial (`greq-history`, 20)
+- **Historial** — Modal con grupos guardados, retomar o eliminar
+- **Servidor Mock** — Panel de APIs de prueba con servidor real Rust/axum. Pestañas múltiples, crear/iniciar/detener/eliminar, búsqueda y filtro por método, body y status editables, persistencia en localStorage
+- **Onboarding** — 3 slides con video e imágenes
+- **Undo/redo** — 50 snapshots, Ctrl+Z / Ctrl+Shift+Z
+- **Guardar/cargar** — Flujos completos en JSON
+- **Búsqueda de grupos** — `NodeSearch` para encontrar nodos URL por título

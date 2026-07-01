@@ -115,7 +115,14 @@ function MethodNode({ data, selected, id }: NodeProps<MethodNodeType>) {
               {data.method}
             </span>
           </div>
-          <span className="text-[10px] text-zinc-400/60 font-medium tracking-tight">Solicitud</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-zinc-400/60 font-medium tracking-tight">Solicitud</span>
+            {(data as any).repeatCount > 1 && (
+              <span className="text-[9px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1 py-0.5 rounded-md leading-none">
+                ×{(data as any).repeatCount}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Execute button */}

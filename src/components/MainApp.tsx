@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -23,6 +23,7 @@ import { palettes, methodLabels } from '../constants'
 import { useExecStore, type StoredResponse } from '../store/execStore'
 import { resolveVariables } from '../utils/resolveVariables'
 import { NodeSearch } from './NodeSearch'
+import { MockApi } from './MockApi'
 
 type SidebarMode = 'options' | 'nodes'
 
@@ -30,7 +31,7 @@ const initialNodes: Node[] = []
 const initialEdges: Edge[] = []
 
 const methodMap: Record<string, HttpMethod> = {
-  get: 'GET', post: 'POST', update: 'UPDATE', del: 'DELETE',
+  get: 'GET', post: 'POST', update: 'UPDATE', delete: 'DELETE',
 }
 
 interface CanvasProps {
@@ -123,14 +124,46 @@ export function MainApp() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; node: Node } | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
+  const [showMockApi, setShowMockApi] = useState(false)
+  const [groupDeleteInfo, setGroupDeleteInfo] = useState<{ node: Node; methods: Node[] } | null>(null)
   const takeSnapshot = useFlowStore((s) => s.takeSnapshot)
   const undo = useFlowStore((s) => s.undo)
   const redo = useFlowStore((s) => s.redo)
   const canUndo = useFlowStore((s) => s.canUndo)
   const canRedo = useFlowStore((s) => s.canRedo)
   const setNodeData = useCallback((id: string, data: Partial<any>) => {
+    const node = nodes.find((n) => n.id === id)
+    if (node && ('title' in data || 'url' in data)) {
+      const mergedData = { ...node.data, ...data }
+      if (mergedData.title) {
+        const methodEdges = edges.filter((e) => e.source === id)
+        const methodNodes = methodEdges
+          .map((e) => nodes.find((n) => n.id === e.target))
+          .filter(Boolean) as Node[]
+        const entry = {
+          id,
+          title: mergedData.title,
+          url: mergedData.url || '',
+          timestamp: Date.now(),
+          methodCount: methodNodes.length,
+          nodes: [{ ...node, data: mergedData }, ...methodNodes],
+          edges: methodEdges,
+        }
+        const existing: any[] = JSON.parse(localStorage.getItem('greq-history') || '[]')
+        const idx = existing.findIndex((h: any) => h.id === id)
+        if (idx >= 0) existing[idx] = entry
+        else existing.unshift(entry)
+        localStorage.setItem('greq-history', JSON.stringify(existing.slice(0, 20)))
+      }
+    }
     setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...data } } : n)))
-  }, [setNodes])
+  }, [nodes, edges, setNodes])
+
+  const liveSelectedNode = useMemo(
+    () => selectedNode ? nodes.find((n) => n.id === selectedNode.id) ?? selectedNode : null,
+    [selectedNode, nodes],
+  )
 
   const setLoading = useExecStore((s) => s.setLoading)
   const setExecuteFn = useExecStore((s) => s.setExecuteFn)
@@ -140,6 +173,9 @@ export function MainApp() {
   const executeNode = useCallback(async (nodeId: string) => {
     const methodNode = nodes.find((n) => n.id === nodeId)
     if (!methodNode) return
+
+    const methodData = (methodNode.data as any) ?? {}
+    const repeatCount = methodData.repeatCount ?? 1
 
     setLoading(nodeId, true)
 
@@ -165,7 +201,6 @@ export function MainApp() {
         ? nodes.find((n) => n.id === methodIncomingEdges[0].source)
         : null
       const sourceData = (sourceNode?.data as any) ?? {}
-      const methodData = (methodNode.data as any) ?? {}
 
       let rawUrl = (sourceData.url as string) || ''
       // Resolve variables first, then add http:// prefix if needed
@@ -192,20 +227,26 @@ export function MainApp() {
       const resolvedBody = resolveVariables(methodData.body ?? '', allResponses, prevMethodId)
       const resolvedAuthValue = resolveVariables(methodData.authValue ?? '', allResponses, prevMethodId)
 
-      const response = await invoke<StoredResponse>('make_request', {
-        input: {
-          url,
-          method: methodData.method ?? 'GET',
-          headers: resolvedHeaders,
-          body: resolvedBody,
-          bodyType: methodData.bodyType ?? 'json',
-          authType: methodData.auth ?? 'None',
-          authValue: resolvedAuthValue,
-        },
-      })
+      const allResponsesArr: StoredResponse[] = []
 
-      setNodeData(nodeId, { response })
-      setResponse(nodeId, response)
+      for (let i = 0; i < repeatCount; i++) {
+        const response = await invoke<StoredResponse>('make_request', {
+          input: {
+            url,
+            method: methodData.method ?? 'GET',
+            headers: resolvedHeaders,
+            body: resolvedBody,
+            bodyType: methodData.bodyType ?? 'json',
+            authType: methodData.auth ?? 'None',
+            authValue: resolvedAuthValue,
+          },
+        })
+        allResponsesArr.push(response)
+      }
+
+      const lastResponse = allResponsesArr[allResponsesArr.length - 1]
+      setNodeData(nodeId, { response: lastResponse, responses: allResponsesArr })
+      setResponse(nodeId, lastResponse)
     } catch (err) {
       const errResp: StoredResponse = {
         status: 0,
@@ -220,6 +261,32 @@ export function MainApp() {
       setLoading(nodeId, false)
     }
   }, [nodes, edges, setNodeData, setLoading, setResponse])
+
+  const saveGroupsToHistory = useCallback(() => {
+    const urlNodes = nodes.filter((n) => n.type === 'url' && (n.data as any)?.title)
+    if (urlNodes.length === 0) return
+    const existing: any[] = JSON.parse(localStorage.getItem('greq-history') || '[]')
+    for (const urlNode of urlNodes) {
+      const title = (urlNode.data as any).title
+      const methodEdges = edges.filter((e) => e.source === urlNode.id)
+      const methodNodes = methodEdges
+        .map((e) => nodes.find((n) => n.id === e.target))
+        .filter(Boolean) as Node[]
+      const entry = {
+        id: urlNode.id,
+        title,
+        url: (urlNode.data as any).url || '',
+        timestamp: Date.now(),
+        methodCount: methodNodes.length,
+        nodes: [urlNode, ...methodNodes],
+        edges: methodEdges,
+      }
+      const idx = existing.findIndex((h: any) => h.id === urlNode.id)
+      if (idx >= 0) existing[idx] = entry
+      else existing.unshift(entry)
+    }
+    localStorage.setItem('greq-history', JSON.stringify(existing.slice(0, 20)))
+  }, [nodes, edges])
 
   useEffect(() => {
     setExecuteFn(executeNode)
@@ -240,13 +307,34 @@ export function MainApp() {
     setCtxMenu(null)
   }, [nodes, edges, setNodes, takeSnapshot])
 
-  const deleteNode = useCallback((node: Node) => {
+  const performDelete = useCallback((node: Node, deleteGroup = false) => {
     takeSnapshot(nodes, edges)
-    setNodes((nds) => nds.filter((n) => n.id !== node.id))
-    setEdges((eds) => eds.filter((e) => e.source !== node.id && e.target !== node.id))
-    setSelectedNode((prev) => (prev?.id === node.id ? null : prev))
+    if (deleteGroup) {
+      const childIds = edges.filter((e) => e.source === node.id).map((e) => e.target)
+      setNodes((nds) => nds.filter((n) => n.id !== node.id && !childIds.includes(n.id)))
+      setEdges((eds) => eds.filter((e) => e.source !== node.id && e.target !== node.id && !childIds.includes(e.source)))
+    } else {
+      setNodes((nds) => nds.filter((n) => n.id !== node.id))
+      setEdges((eds) => eds.filter((e) => e.source !== node.id && e.target !== node.id))
+    }
+    setSelectedNode(null)
     setCtxMenu(null)
-  }, [setNodes, setEdges, takeSnapshot])
+  }, [nodes, edges, setNodes, setEdges, takeSnapshot])
+
+  const deleteNode = useCallback((node: Node) => {
+    const title = (node.data as any)?.title
+    if (node.type === 'url' && title) {
+      const methods = edges
+        .filter((e) => e.source === node.id)
+        .map((e) => nodes.find((n) => n.id === e.target))
+        .filter((n) => n?.type === 'method') as Node[]
+      if (methods.length > 0) {
+        setGroupDeleteInfo({ node, methods })
+        return
+      }
+    }
+    performDelete(node, false)
+  }, [edges, nodes, performDelete])
 
   const addNodeToCanvas = useCallback(
     (type: string, position?: { x: number; y: number }) => {
@@ -269,7 +357,7 @@ export function MainApp() {
       }
       const method = methodMap[type]
       if (method) {
-        setNodes((nds) => [...nds, { id, type: 'method', position: pos, data: { method, headers: [], body: '', bodyType: 'json', auth: 'None' } } as Node])
+        setNodes((nds) => [...nds, { id, type: 'method', position: pos, data: { method, headers: [], body: '', bodyType: 'json', auth: 'None', repeatCount: 1 } } as Node])
       }
     },
     [setNodes, takeSnapshot, nodes, edges],
@@ -316,19 +404,16 @@ export function MainApp() {
       const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName) || (e.target as HTMLElement)?.isContentEditable
       if ((e.key === 'Delete' || e.key === 'Supr' || e.key === 'Backspace') && selectedNode && !isInput) {
         e.preventDefault()
-        takeSnapshot(nodes, edges)
-        const node = selectedNode
-        setNodes((nds) => nds.filter((n) => n.id !== node.id))
-        setEdges((eds) => eds.filter((e) => e.source !== node.id && e.target !== node.id))
-        setSelectedNode(null)
+        deleteNode(selectedNode)
       }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [undo, redo, setNodes, setEdges, selectedNode, nodes, edges, takeSnapshot])
+  }, [undo, redo, setNodes, setEdges, selectedNode, nodes, edges, takeSnapshot, deleteNode])
 
   /* Save flow */
   const saveFlow = useCallback(() => {
+    saveGroupsToHistory()
     const data = { nodes, edges }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -337,7 +422,7 @@ export function MainApp() {
     a.download = `flow-${Date.now()}.json`
     a.click()
     URL.revokeObjectURL(url)
-  }, [nodes, edges])
+  }, [nodes, edges, saveGroupsToHistory])
 
   /* Load flow */
   const loadFlow = useCallback(() => {
@@ -431,24 +516,42 @@ export function MainApp() {
             {sidebarMode === 'options' ? (
               <>
                 <button
-                  onClick={() => setSidebarMode('nodes')}
-                  className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-semibold
-                             bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20
-                             transition-all active:scale-[0.98]"
+                  onClick={() => { setSidebarMode('nodes'); setShowMockApi(false); }}
+                  className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] ${
+                    !showMockApi
+                      ? 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20'
+                      : 'font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100'
+                  }`}
                 >
                   <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
                   </svg>
                   Hacer peticiones
                 </button>
-                <span className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-medium text-zinc-400 cursor-not-allowed select-none">
-                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                  </svg>
-                  Mandar llamar APIs
-                </span>
-              </>
-            ) : (
+                  <button
+                    onClick={() => setShowHistory(true)}
+                    className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 active:scale-[0.98] transition-all"
+                  >
+                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Historial
+                  </button>
+                  <button
+                    onClick={() => { setShowMockApi(true); setSelectedNode(null); setSidebarMode('options'); }}
+                    className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] ${
+                      showMockApi
+                        ? 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20'
+                        : 'font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+                    </svg>
+                    Generar API
+                  </button>
+                </>
+              ) : (
               <>
                 <button
                   onClick={() => setSidebarMode('options')}
@@ -464,7 +567,7 @@ export function MainApp() {
                 <NodeCard type="url" onAdd={addNodeToCanvas} />
                 <NodeCard type="get" onAdd={addNodeToCanvas} />
                 <NodeCard type="post" onAdd={addNodeToCanvas} />
-                <NodeCard type="del" onAdd={addNodeToCanvas} />
+                <NodeCard type="delete" onAdd={addNodeToCanvas} />
                 <NodeCard type="update" onAdd={addNodeToCanvas} />
               </>
             )}
@@ -474,6 +577,10 @@ export function MainApp() {
             className="flex-1 relative"
             onClick={() => setCtxMenu(null)}
           >
+            {showMockApi ? (
+              <MockApi onClose={() => setShowMockApi(false)} />
+            ) : (
+              <>
             <Canvas
               nodes={nodes}
               edges={edges}
@@ -503,6 +610,8 @@ export function MainApp() {
                 </div>
               </div>
             )}
+              </>
+            )}
           </main>
 
           {ctxMenu && (
@@ -515,73 +624,116 @@ export function MainApp() {
             />
           )}
 
-          {selectedNode && (
+          {liveSelectedNode && (
             <ConfigPanel
-              node={selectedNode}
+              node={liveSelectedNode}
               setNodeData={setNodeData}
               onClose={() => setSelectedNode(null)}
             />
           )}
         </div>
       </div>
+
+      {showHistory && (
+        <HistoryModal
+          onClose={() => setShowHistory(false)}
+          onRetomar={(entry) => {
+            setNodes((nds) => [...nds, ...entry.nodes.map((n) => ({ ...n, selected: false } as Node))])
+            setEdges((eds) => [...eds, ...entry.edges])
+            setShowHistory(false)
+          }}
+        />
+      )}
+
+      {groupDeleteInfo && (
+        <GroupDeleteModal
+          node={groupDeleteInfo.node}
+          methods={groupDeleteInfo.methods}
+          onDeleteGroup={() => {
+            performDelete(groupDeleteInfo.node, true)
+            setGroupDeleteInfo(null)
+          }}
+          onDeleteNode={() => {
+            performDelete(groupDeleteInfo.node, false)
+            setGroupDeleteInfo(null)
+          }}
+          onCancel={() => setGroupDeleteInfo(null)}
+        />
+      )}
     </ReactFlowProvider>
   )
 }
 
 function ResponseSection({ node, setNodeData }: { node: Node; setNodeData: (id: string, data: Partial<any>) => void }) {
   const d = (node.data as any) ?? {}
-  const res = d.response
-  if (!res) return null
+  const responsesList = d.responses as any[] | undefined
+  const singleRes = d.response as any
 
-  const statusColor =
-    res.status >= 200 && res.status < 300 ? 'text-emerald-500'
-    : res.status >= 300 && res.status < 400 ? 'text-amber-500'
-    : res.status >= 400 ? 'text-red-500'
-    : 'text-zinc-500'
+  const allRes = responsesList ?? (singleRes ? [singleRes] : [])
+  if (allRes.length === 0) return null
 
   return (
     <div className="space-y-3 border-t border-zinc-100 pt-4">
       <div className="flex items-center justify-between">
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em]">Respuesta</label>
+        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em]">
+          {allRes.length > 1 ? `Respuestas (${allRes.length})` : 'Respuesta'}
+        </label>
         <button
-          onClick={() => setNodeData(node.id, { response: undefined })}
+          onClick={() => setNodeData(node.id, { response: undefined, responses: undefined })}
           className="text-[9px] text-zinc-400 hover:text-zinc-600 transition-colors"
         >
           Limpiar
         </button>
       </div>
 
-      <div className="flex items-center gap-2">
-        <span className={`text-xs font-bold ${statusColor}`}>
-          {res.status}
-        </span>
-        <span className="text-[10px] text-zinc-500">{res.statusText}</span>
-        <span className="text-[9px] text-zinc-400 ml-auto">{res.durationMs}ms</span>
-      </div>
+      {allRes.map((res: any, idx: number) => {
+        const statusColor =
+          res.status >= 200 && res.status < 300 ? 'text-emerald-500'
+          : res.status >= 300 && res.status < 400 ? 'text-amber-500'
+          : res.status >= 400 ? 'text-red-500'
+          : 'text-zinc-500'
 
-      <details className="group">
-        <summary className="text-[10px] font-medium text-zinc-500 cursor-pointer hover:text-zinc-700 transition-colors list-none flex items-center gap-1.5">
-          <svg className="w-3 h-3 text-zinc-400 group-open:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-          Headers ({res.headers?.length ?? 0})
-        </summary>
-        <div className="mt-1.5 space-y-0.5 max-h-36 overflow-y-auto">
-          {(res.headers as { key: string; value: string }[] ?? []).map((h: any, i: number) => (
-            <div key={i} className="flex gap-2 text-[9px] font-mono">
-              <span className="text-zinc-500 shrink-0">{h.key}:</span>
-              <span className="text-zinc-700 break-all">{h.value}</span>
+        return (
+          <div key={idx}>
+            {allRes.length > 1 && (
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-px flex-1 bg-zinc-100" />
+                <span className="text-[9px] font-medium text-zinc-400">{idx + 1}/{allRes.length}</span>
+                <div className="h-px flex-1 bg-zinc-100" />
+              </div>
+            )}
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`text-xs font-bold ${statusColor}`}>{res.status}</span>
+              <span className="text-[10px] text-zinc-500">{res.statusText}</span>
+              <span className="text-[9px] text-zinc-400 ml-auto">{res.durationMs}ms</span>
             </div>
-          ))}
-        </div>
-      </details>
 
-      <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Body</label>
-        <pre className="w-full max-h-60 overflow-auto bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-2 text-[10px] font-mono text-zinc-700 leading-relaxed whitespace-pre-wrap break-all">
-          {res.body}
-        </pre>
-      </div>
+            <details className="group mb-2">
+              <summary className="text-[10px] font-medium text-zinc-500 cursor-pointer hover:text-zinc-700 transition-colors list-none flex items-center gap-1.5">
+                <svg className="w-3 h-3 text-zinc-400 group-open:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+                Headers ({res.headers?.length ?? 0})
+              </summary>
+              <div className="mt-1.5 space-y-0.5 max-h-36 overflow-y-auto">
+                {(res.headers as { key: string; value: string }[] ?? []).map((h: any, i: number) => (
+                  <div key={i} className="flex gap-2 text-[9px] font-mono">
+                    <span className="text-zinc-500 shrink-0">{h.key}:</span>
+                    <span className="text-zinc-700 break-all">{h.value}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+
+            <div className="mb-3">
+              <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Body</label>
+              <pre className="w-full max-h-60 overflow-auto bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-2 text-[10px] font-mono text-zinc-700 leading-relaxed whitespace-pre-wrap break-all">
+                {res.body}
+              </pre>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -604,59 +756,14 @@ function NodeCard({ type, onAdd }: { type: string; onAdd: (type: string, pos?: {
       onClick={() => onAdd(type)}
       className="cursor-grab active:cursor-grabbing select-none transition-all active:scale-[0.97]"
     >
-      {isUrl ? (
-        <div className="relative bg-white rounded-xl shadow-[0_1px_4px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] border border-zinc-200/60 overflow-hidden">
-          <div className="absolute inset-0 rounded-xl bg-gradient-to-b from-white/60 to-transparent pointer-events-none" />
-          <div
-            className="absolute left-0 top-2 bottom-2 w-[2.5px] rounded-r-full"
-            style={{ background: `linear-gradient(180deg, ${c.from}, ${c.to})` }}
-          />
-          <div className="relative pl-4 pr-3 py-2">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c.dot, boxShadow: `0 0 4px ${c.dot}60` }} />
-              <span className="text-[7px] font-semibold text-zinc-400/80 uppercase tracking-[0.18em]">URL</span>
-            </div>
-            <div className="flex items-center gap-1.5 rounded-lg border px-1.5 py-1" style={{ borderColor: 'rgba(0,0,0,0.06)', backgroundColor: 'rgba(244,244,245,0.7)' }}>
-              <svg className="w-2.5 h-2.5 text-zinc-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-              </svg>
-              <span className="text-[7px] font-mono text-zinc-400">https://api...</span>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="relative bg-white rounded-xl shadow-[0_1px_4px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] border border-zinc-200/60 overflow-hidden">
-          <div className="absolute inset-0 rounded-xl bg-gradient-to-b from-white/60 to-transparent pointer-events-none" />
-          <div
-            className="relative h-1.5 w-full"
-            style={{ background: `linear-gradient(135deg, ${c.from}, ${c.to})`, boxShadow: `0 1px 6px ${c.dot}30` }}
-          />
-          <div className="relative p-2.5 pt-2">
-            <div className="flex items-center gap-1.5 mb-2">
-              <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c.dot, boxShadow: `0 0 4px ${c.dot}60` }} />
-              <span className="text-[8px] font-bold uppercase tracking-[0.12em]" style={{ color: c.dot }}>{c.label}</span>
-              <span className="text-[7px] text-zinc-400/60 font-medium ml-auto">Solicitud</span>
-            </div>
-            <div
-              className="flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-white text-[8px] font-semibold"
-              style={{ background: `linear-gradient(135deg, ${c.from}, ${c.to})`, boxShadow: `0 1px 4px ${c.dot}30, inset 0 1px 0 rgba(255,255,255,0.2)` }}
-            >
-              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 3l14 9-14 9V3z" />
-              </svg>
-              Ejecutar
-            </div>
-            <div
-              className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 w-[5px] h-[5px] rounded-full border-[1.5px] border-white shadow-sm"
-              style={{ background: `linear-gradient(135deg, ${c.from}, ${c.to})` }}
-            />
-            <div
-              className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-[3px] w-[5px] h-[5px] rounded-full border-[1.5px] border-white shadow-sm"
-              style={{ background: `linear-gradient(135deg, ${c.from}, ${c.to})` }}
-            />
-          </div>
-        </div>
-      )}
+      <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white border border-zinc-200/70 shadow-sm hover:shadow-md hover:border-zinc-300/80 transition-all">
+        <div
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ backgroundColor: isUrl ? '#10b981' : c.dot }}
+        />
+        <span className="text-xs font-semibold text-zinc-700">{isUrl ? 'URL' : c.label}</span>
+        <span className="text-[9px] text-zinc-400 ml-auto">{isUrl ? 'Enlace' : 'Solicitud'}</span>
+      </div>
     </div>
   )
 }
@@ -879,6 +986,21 @@ function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (id: str
       </div>
 
       <div>
+        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Repetir</label>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={1}
+            max={99}
+            value={d.repeatCount ?? 1}
+            onChange={(e) => setNodeData(node.id, { repeatCount: parseInt(e.target.value) || 1 })}
+            className="w-14 bg-zinc-50 border border-zinc-200/80 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400 transition-all"
+          />
+          <span className="text-[10px] text-zinc-400">veces</span>
+        </div>
+      </div>
+
+      <div>
         <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Headers</label>
         <KeyValueEditor
           pairs={d.headers ?? []}
@@ -947,6 +1069,148 @@ function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (id: str
             className="w-full bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-1.5 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400 transition-all"
           />
         )}
+      </div>
+    </div>
+  )
+}
+
+/* ─── History Modal ─── */
+
+interface HistoryEntry {
+  id: string
+  title: string
+  url: string
+  timestamp: number
+  methodCount: number
+  nodes: Node[]
+  edges: Edge[]
+}
+
+function HistoryModal({ onClose, onRetomar }: { onClose: () => void; onRetomar: (entry: HistoryEntry) => void }) {
+  const [entries, setEntries] = useState<HistoryEntry[]>([])
+
+  useEffect(() => {
+    try {
+      setEntries(JSON.parse(localStorage.getItem('greq-history') || '[]'))
+    } catch { setEntries([]) }
+  }, [])
+
+  const removeEntry = (id: string) => {
+    const next = entries.filter((e) => e.id !== id)
+    setEntries(next)
+    localStorage.setItem('greq-history', JSON.stringify(next))
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] border border-zinc-200/80 w-full max-w-lg max-h-[70vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-100">
+          <span className="text-sm font-semibold text-zinc-800">Historial de grupos</span>
+          <button onClick={onClose} className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-all">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {entries.length === 0 && (
+            <p className="text-xs text-zinc-400 text-center py-8">No hay grupos guardados aún.</p>
+          )}
+          {entries.map((entry) => (
+            <div key={entry.id} className="flex items-center gap-3 p-3 rounded-xl bg-zinc-50 border border-zinc-200/60">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold text-zinc-800 truncate">{entry.title}</span>
+                  <span className="text-[9px] text-zinc-400 shrink-0">{new Date(entry.timestamp).toLocaleDateString()}</span>
+                </div>
+                <div className="text-[10px] font-mono text-zinc-400 truncate mb-1.5">{entry.url || 'Sin URL'}</div>
+                <div className="flex items-center gap-1">
+                  {entry.nodes.filter((n: any) => n.type === 'method').map((n: any) => {
+                    const p = palettes[methodLabels[n.data?.method] as keyof typeof palettes]
+                    return <div key={n.id} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: p?.dot ?? '#a1a1aa' }} />
+                  })}
+                  <span className="text-[9px] text-zinc-400 ml-1">{entry.methodCount} petición{entry.methodCount !== 1 ? 'es' : ''}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => onRetomar(entry)}
+                  className="px-2.5 py-1.5 rounded-lg text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-all"
+                >
+                  Retomar
+                </button>
+                <button
+                  onClick={() => removeEntry(entry.id)}
+                  className="px-2.5 py-1.5 rounded-lg text-[10px] font-medium text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Group Delete Modal ─── */
+
+function GroupDeleteModal({ node, methods, onDeleteGroup, onDeleteNode, onCancel }: {
+  node: Node
+  methods: Node[]
+  onDeleteGroup: () => void
+  onDeleteNode: () => void
+  onCancel: () => void
+}) {
+  const title = (node.data as any)?.title || 'Sin título'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] border border-zinc-200/80 w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-8 h-8 rounded-xl bg-red-50 flex items-center justify-center">
+            <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+          </div>
+          <div>
+            <span className="text-sm font-semibold text-zinc-800">Eliminar grupo</span>
+            <p className="text-[11px] text-zinc-500">"{title}" está conectado a {methods.length} peticion{methods.length !== 1 ? 'es' : ''}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 mb-4 pl-11">
+          {methods.map((m) => {
+            const p = palettes[methodLabels[(m.data as any)?.method] as keyof typeof palettes]
+            return (
+              <span key={m.id} className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase" style={{ backgroundColor: `${p?.dot}15`, color: p?.dot }}>
+                {(m.data as any)?.method || 'GET'}
+              </span>
+            )
+          })}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <button
+            onClick={onDeleteGroup}
+            className="w-full py-2 rounded-xl text-xs font-semibold bg-red-500 text-white hover:bg-red-600 active:scale-[0.98] transition-all"
+          >
+            Eliminar todo el grupo
+          </button>
+          <button
+            onClick={onDeleteNode}
+            className="w-full py-2 rounded-xl text-xs font-medium text-zinc-600 bg-zinc-100 hover:bg-zinc-200 active:scale-[0.98] transition-all"
+          >
+            Eliminar solo el nodo base
+          </button>
+          <button
+            onClick={onCancel}
+            className="w-full py-2 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-600 active:scale-[0.98] transition-all"
+          >
+            Cancelar
+          </button>
+        </div>
       </div>
     </div>
   )

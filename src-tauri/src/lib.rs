@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
+mod mock;
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RequestInput {
@@ -15,9 +17,9 @@ struct RequestInput {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct HeaderPair {
-    key: String,
-    value: String,
+pub struct HeaderPair {
+    pub key: String,
+    pub value: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -137,7 +139,8 @@ async fn make_request(input: RequestInput) -> Result<ResponseOutput, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![make_request])
+        .manage(mock::MockManager::new())
+        .invoke_handler(tauri::generate_handler![make_request, mock::start_mock_server, mock::stop_mock_server])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

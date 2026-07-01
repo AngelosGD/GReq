@@ -1,52 +1,73 @@
 # GReq — Visual Node-Based API Client
 
-## Stack
-- **Desktop:** Tauri v2 (Rust)
-- **Frontend:** React 18 + TypeScript + Vite
-- **Nodes:** `@xyflow/react`
-- **Styles:** TailwindCSS (light mode only)
-- **State:** Zustand
-- **HTTP:** reqwest (Rust side, `rustls-tls`, no native TLS, JSON enabled)
-
 ## Commands
-- `npm run dev` — Vite dev server (port 1420, strict port, HMR 1421 when `TAURI_DEV_HOST` is set)
-- `npm run tauri dev` — Tauri desktop app (auto-starts Vite)
-- `npm run build` — `tsc && vite build` (type-check runs first)
-- `npm run tauri build` — Release build
-- No test/lint scripts
+```bash
+npm run dev          # Standalone Vite dev (port 1420, strict)
+npm run tauri dev    # Tauri desktop — auto-runs `npm run dev` via beforeDevCommand
+npm run build        # tsc + Vite build (typecheck first)
+npm run tauri build  # Release — auto-runs `npm run build` via beforeBuildCommand
+npm run preview      # Vite preview of built frontend
+npm run tauri        # Tauri CLI shortcut
+```
+No lint, test, or format commands exist.
 
-## Frontend
-- **Entrypoint:** `index.html` (lang `es`) → `src/main.tsx`
-- **Logo:** 3 connected black dots on white bg (`src/components/Logo.tsx`)
-- **Screens:** `onboarding` → `auth` → `main` (appStore `screen`)
-- **MainApp:** header (undo/redo, guardar/cargar flujo, buscador de grupos, settings), left sidebar (añadir nodos), right sidebar (config panel), canvas
-- **Custom nodes:** UrlNode (input URL + target/source handles), MethodNode (método + botón ejecutar + loading state)
-- **Edges:** `AnimatedFlowEdge` con dash animado, botón de borrar al seleccionar
-- **Context menu:** right-click → Duplicar / Eliminar
-- **Undo/redo:** Ctrl+Z / Ctrl+Shift+Z (historial de 50 snapshots)
-- **Save/load:** descarga JSON / carga JSON
-- **NodeSearch:** buscador en header que lista URL nodes con nombre, expande métodos conectados, clic centra canvas
-- **Styles:** `src/index.css` — Tailwind, scrollbar 6px, fade-in, emerald selection
-- **TS strict** with `noUnusedLocals` + `noUnusedParameters`; Vite ignores `src-tauri/**`
-- **Constants compartidos:** `src/constants.ts` — paletas de colores, methodLabels
+## Stack
+- Frontend: `src/` — React 18 + TypeScript + Vite + TailwindCSS (light-mode only despite `class` dark mode config)
+- Backend: `src-tauri/` — Rust crate `api-flow` / lib `api_flow_lib`, Tauri v2. IPC: `make_request`, `start_mock_server`, `stop_mock_server`.
+- State: Zustand — 4 stores (`appStore`, `flowStore`, `execStore`, `themeStore`)
+- Flow: `@xyflow/react` v12 — 2 node types (`url`, `method`), 1 edge type (`animated`)
 
-## Rust backend
-- `src-tauri/src/lib.rs`: comando `make_request` implementado con reqwest
-- Soporta GET/POST/PUT/DELETE, body JSON/text/form, headers, query params, auth Bearer/Basic
-- Mide duración en ms
-- Timeout 30s, prefijo automático `http://`
+## Architecture
+- **4 screens** (`appStore.screen`): `onboarding` → `auth` → `main` → `settings`
+- **Auth** is a client-side stub — any form submission calls `onSuccess()`. No backend auth.
+- **Settings** is empty ("No hay ajustes disponibles.")
+- **Theme store** stub: `toggle: () => {}` — dark mode not wired despite `dark:` CSS classes present
+- **Sidebar drag keys**: URL uses `'url'`; methods use `'get'`, `'post'`, `'delete'`, `'update'`
+- **Node data shapes**: UrlNode `{ url, title, params:[], headers:[] }`; MethodNode `{ method, headers, body, bodyType, auth, authValue }`
+- **Request execution**: walks edges backward through URL nodes to find previous method for `$prev` resolution. Execution registered via `execStore.setExecuteFn`.
+- **Context menu** (right-click): Duplicate / Delete node
+- **Group search**: `NodeSearch` component allows finding URL nodes by title and navigating to them
+- **History**: Named groups auto-save to localStorage (`greq-history`, last 20). Save via "Guardar" or when a URL node gets a title. History modal (clock icon in toolbar) shows each group with its connected methods — "Retomar" restores to canvas, "Eliminar" removes from history.
+- **Group-aware deletion**: Deleting a named URL node with connected method nodes shows a modal: "Eliminar todo el grupo" (URL + all its methods) or "Eliminar solo el nodo base" (orphan the methods).
+- **Mock API panel**: Reemplaza el canvas con split-view (sidebar + detalle). Pestañas múltiples (como navegador), filtro por método + búsqueda por nombre. APIs persistentes en localStorage (`greq-mock-apis`, 20 máximo). Botón "Generar API" en sidebar cambia a verde cuando activo.
+- **Onboarding**: 3 slides con media (imágenes y video autoplay loop muted). Navegación centrada con flechas y dots. Texto siempre centrado.
 
-## Encadenamiento de requests
-- Respuestas guardadas en `execStore.responses` por nodeId
-- Sintaxis de variables: `{{$prev.body.path}}`, `{{$prev.headers.Name}}`, `{{$prev.status}}`
-- Soporta referencias explícitas: `{{nodeId.body.path}}`
-- Resolución recursiva: URL → Method → URL → Method (sigue la cadena de edges)
-- UrlNode ahora tiene target handle (izquierda) + source handle (derecha)
+## Variable Syntax
+- `{{$prev.body.path.to.field}}` — JSON body path
+- `{{$prev.body}}` — full body as string
+- `{{$prev.headers.Header-Name}}` — case-insensitive header lookup
+- `{{$prev.status}}` — HTTP status code
+- `{{$prev.statusText}}` — status text
+- `{{nodeId.body.path}}` — explicit node reference
 
-## Nombre de grupos
-- URL nodes aceptan campo `title` (configurable en panel derecho)
-- Se muestra como badge arriba del URL node en el canvas
-- NodeSearch los lista para navegación rápida
+## Backend (Rust) Behavior
+### make_request
+- Auto-prepends `http://` when no scheme (also done in frontend before invoking)
+- 30s hardcoded timeout, duration in ms
+- Body types: JSON (auto-parses, falls back to raw), text, form
+- Auth: Bearer or Basic (`user:pass`)
+- Debug output via `eprintln!` in debug builds only
 
-## Project state
-Frontend y backend funcionales. Se pueden hacer requests HTTP reales, encadenar respuestas, navegar por grupos. Próximo: history de requests, JSON tree viewer, entornos con variables, snippets cURL.
+### start_mock_server
+- **Config**: `{ path, method, status, headers, body, port }` — arranca servidor axum en `127.0.0.1:{port}` (o puerto aleatorio si no se especifica)
+- **Returns**: `{ url, id }` con la URL real y un ID para detenerlo
+- Usa `axum::serve` con `with_graceful_shutdown` via oneshot channel
+- Responde a todas las rutas con el status, headers y body configurados
+
+### stop_mock_server
+- **Input**: `{ id }` — envía señal de shutdown al servidor
+- **Returns**: `()` o error si no existe
+
+### General
+- `#[serde(rename_all = "camelCase")]` — JS envía `bodyType`, `authType`, `port`, etc.
+- `MockManager` estado global con `Mutex<HashMap<String, ShutdownSender>>`
+
+## Save/Load & Undo
+- Saves `{ nodes, edges }` as JSON download; loads via file input (`.json`)
+- Snapshot undo/redo (50 max) via `flowStore`, triggered before mutations
+- `Ctrl+Z` undo, `Ctrl+Shift+Z` / `Ctrl+Y` redo; `Delete`/`Backspace` removes selected node
+
+## Config Quirks
+- `tsconfig.json`: strict, `noUnusedLocals`, `noUnusedParameters`, `skipLibCheck`
+- `tauri.conf.json`: `beforeDevCommand: "npm run dev"`, `beforeBuildCommand: "npm run build"`, window 1000×650, CSP disabled
+- `src-tauri/capabilities/default.json`: only `core:default` permission
