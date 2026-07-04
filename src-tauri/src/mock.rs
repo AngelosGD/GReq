@@ -11,7 +11,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
-use crate::HeaderPair;
+use crate::{AppError, HeaderPair};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,7 +80,7 @@ impl Default for MockManager {
 pub async fn start_mock_server(
     config: MockConfig,
     state: tauri::State<'_, MockManager>,
-) -> Result<MockServerInfo, String> {
+) -> Result<MockServerInfo, AppError> {
     let id = format!(
         "mock_{}",
         std::time::SystemTime::now()
@@ -105,11 +105,11 @@ pub async fn start_mock_server(
     };
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
-        .map_err(|e| format!("No se pudo iniciar el servidor: {}", e))?;
+        .map_err(|e| AppError::Server(format!("No se pudo iniciar el servidor: {}", e)))?;
 
     let port = listener
         .local_addr()
-        .map_err(|e| format!("Error al obtener puerto: {}", e))?
+        .map_err(|e| AppError::Server(format!("Error al obtener puerto: {}", e)))?
         .port();
 
     let clean_path = config.path.trim_start_matches('/');
@@ -139,10 +139,10 @@ pub async fn start_mock_server(
 pub async fn stop_mock_server(
     id: String,
     state: tauri::State<'_, MockManager>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let tx = state.servers.lock().await.remove(&id);
     match tx {
-        Some(tx) => tx.send(()).map_err(|_| "Error al detener el servidor".to_string()),
-        None => Err("Servidor no encontrado".to_string()),
+        Some(tx) => tx.send(()).map_err(|_| AppError::Server("Error al detener el servidor".to_string())),
+        None => Err(AppError::NotFound("Servidor no encontrado".to_string())),
     }
 }

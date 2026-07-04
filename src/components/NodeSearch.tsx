@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useReactFlow, type Node as FlowNode, type Edge } from '@xyflow/react'
 import { palettes, methodLabels } from '../constants'
+import { getUrlData, getMethodData } from '../utils/nodeData'
 
 export function NodeSearch({ nodes, edges }: { nodes: FlowNode[]; edges: Edge[] }) {
   const [open, setOpen] = useState(false)
@@ -12,7 +13,7 @@ export function NodeSearch({ nodes, edges }: { nodes: FlowNode[]; edges: Edge[] 
 
   const groups = useMemo(() => {
     return nodes
-      .filter((n) => n.type === 'url' && (n.data as any)?.title)
+      .filter((n) => n.type === 'url' && getUrlData(n).title)
       .map((n) => ({
         urlNode: n,
         methods: edges
@@ -23,7 +24,7 @@ export function NodeSearch({ nodes, edges }: { nodes: FlowNode[]; edges: Edge[] 
       .filter(
         (g) =>
           !query ||
-          (g.urlNode.data as any).title.toLowerCase().includes(query.toLowerCase()),
+          (getUrlData(g.urlNode).title ?? '').toLowerCase().includes(query.toLowerCase()),
       )
   }, [nodes, edges, query])
 
@@ -82,7 +83,7 @@ export function NodeSearch({ nodes, edges }: { nodes: FlowNode[]; edges: Edge[] 
               </p>
             )}
             {groups.map((g) => {
-              const title = (g.urlNode.data as any).title
+              const title = getUrlData(g.urlNode).title ?? ''
               const isExpanded = expanded[g.urlNode.id]
               return (
                 <div key={g.urlNode.id}>
@@ -110,7 +111,7 @@ export function NodeSearch({ nodes, edges }: { nodes: FlowNode[]; edges: Edge[] 
                   </button>
                   {isExpanded &&
                     g.methods.map((m) => {
-                      const method = (m.data as any)?.method ?? 'GET'
+                      const method = getMethodData(m).method ?? 'GET'
                       const p = palettes[methodLabels[method] as keyof typeof palettes]
                       return (
                         <button

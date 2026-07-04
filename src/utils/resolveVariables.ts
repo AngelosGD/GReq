@@ -65,7 +65,7 @@ export function resolveVariables(
       return String(response.status)
     }
 
-    if (restPath.startsWith('statusText')) {
+    if (restPath === 'statusText') {
       return response.statusText
     }
 

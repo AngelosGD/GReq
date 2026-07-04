@@ -1,7 +1,29 @@
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
+use thiserror::Error;
 
 mod mock;
+
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error("Network error: {0}")]
+    Network(String),
+    #[error("Invalid HTTP method: {0}")]
+    InvalidMethod(String),
+    #[error("Server error: {0}")]
+    Server(String),
+    #[error("Not found: {0}")]
+    NotFound(String),
+}
+
+impl serde::Serialize for AppError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        serializer.serialize_str(self.to_string().as_ref())
+    }
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,13 +55,13 @@ struct ResponseOutput {
 }
 
 #[tauri::command]
-async fn make_request(input: RequestInput) -> Result<ResponseOutput, String> {
+async fn make_request(input: RequestInput) -> Result<ResponseOutput, AppError> {
     let start = Instant::now();
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
-        .map_err(|e| format!("Failed to create client: {}", e))?;
+        .map_err(|e| AppError::Network(format!("Failed to create client: {}", e)))?;
 
     let url = if input.url.starts_with("http://") || input.url.starts_with("https://") {
         input.url.clone()
@@ -48,7 +70,7 @@ async fn make_request(input: RequestInput) -> Result<ResponseOutput, String> {
     };
 
     let method = reqwest::Method::from_bytes(input.method.as_bytes())
-        .map_err(|_| format!("Invalid HTTP method: {}", input.method))?;
+        .map_err(|_| AppError::InvalidMethod(input.method.clone()))?;
 
     let mut req = client.request(method, &url);
 
@@ -99,10 +121,9 @@ async fn make_request(input: RequestInput) -> Result<ResponseOutput, String> {
     if cfg!(debug_assertions) {
         eprintln!("[make_request] URL: {} method: {}", url, input.method);
     }
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| format!("Request failed ({} {}): {:?}", input.method, url, e))?;
+    let resp = req.send().await.map_err(|e| {
+        AppError::Network(format!("Request failed ({} {}): {:?}", input.method, url, e))
+    })?;
 
     let status = resp.status().as_u16();
     let status_text = resp
@@ -114,16 +135,18 @@ async fn make_request(input: RequestInput) -> Result<ResponseOutput, String> {
     let resp_headers: Vec<HeaderPair> = resp
         .headers()
         .iter()
-        .map(|(k, v)| HeaderPair {
-            key: k.to_string(),
-            value: v.to_str().unwrap_or("").to_string(),
+        .filter_map(|(k, v)| {
+            v.to_str().ok().map(|val| HeaderPair {
+                key: k.to_string(),
+                value: val.to_string(),
+            })
         })
         .collect();
 
     let body = resp
         .text()
         .await
-        .map_err(|e| format!("Failed to read response body: {}", e))?;
+        .map_err(|e| AppError::Network(format!("Failed to read response body: {}", e)))?;
 
     let duration_ms = start.elapsed().as_millis() as u64;
 
@@ -140,7 +163,11 @@ async fn make_request(input: RequestInput) -> Result<ResponseOutput, String> {
 pub fn run() {
     tauri::Builder::default()
         .manage(mock::MockManager::new())
-        .invoke_handler(tauri::generate_handler![make_request, mock::start_mock_server, mock::stop_mock_server])
+        .invoke_handler(tauri::generate_handler![
+            make_request,
+            mock::start_mock_server,
+            mock::stop_mock_server
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

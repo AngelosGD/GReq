@@ -3,11 +3,9 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { Node } from '@xyflow/react'
 import { palettes } from '../../constants'
 import { useExecStore } from '../../store/execStore'
+import type { HttpMethod, NodeDataMethod } from '../../types'
 
-export type HttpMethod = 'GET' | 'POST' | 'DELETE' | 'UPDATE'
-
-type MethodNodeData = { method: HttpMethod }
-type MethodNodeType = Node<MethodNodeData>
+type MethodNodeType = Node<Partial<NodeDataMethod>>
 
 type MethodStyle = {
   from: string
@@ -32,7 +30,7 @@ const methodStyles: Record<HttpMethod, MethodStyle> = {
 
 function MethodNode({ data, selected, id }: NodeProps<MethodNodeType>) {
   const [hover, setHover] = useState(false)
-  const cfg = methodStyles[data.method]
+  const cfg = methodStyles[data.method ?? 'GET']
   const loading = useExecStore((s) => s.loading[id] ?? false)
   const executeFn = useExecStore((s) => s.executeFn)
 
@@ -117,9 +115,9 @@ function MethodNode({ data, selected, id }: NodeProps<MethodNodeType>) {
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] text-zinc-400/60 font-medium tracking-tight">Solicitud</span>
-            {(data as any).repeatCount > 1 && (
+            {data.repeatCount && data.repeatCount > 1 && (
               <span className="text-[9px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1 py-0.5 rounded-md leading-none">
-                ×{(data as any).repeatCount}
+                ×{data.repeatCount}
               </span>
             )}
           </div>

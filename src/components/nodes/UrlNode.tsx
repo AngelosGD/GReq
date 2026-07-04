@@ -1,9 +1,9 @@
 import { memo, useState } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import type { Node } from '@xyflow/react'
+import type { NodeDataUrl } from '../../types'
 
-type UrlNodeData = { url?: string; title?: string }
-type UrlNodeType = Node<UrlNodeData>
+type UrlNodeType = Node<Partial<NodeDataUrl>>
 
 function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
   const { updateNodeData } = useReactFlow()

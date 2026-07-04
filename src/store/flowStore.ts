@@ -12,8 +12,6 @@ interface FlowStoreState {
   takeSnapshot: (nodes: Node[], edges: Edge[]) => void
   undo: () => FlowSnapshot | null
   redo: () => FlowSnapshot | null
-  canUndo: () => boolean
-  canRedo: () => boolean
   clear: () => void
 }
 
@@ -60,9 +58,6 @@ export const useFlowStore = create<FlowStoreState>((set, get) => ({
     }))
     return snapshot
   },
-
-  canUndo: () => get().past.length > 0,
-  canRedo: () => get().future.length > 0,
 
   clear: () => set({ past: [], future: [] }),
 }))

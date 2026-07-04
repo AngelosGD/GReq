@@ -1,29 +1,31 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import {
-  ReactFlow,
   ReactFlowProvider,
-  Background,
   useNodesState,
   useEdgesState,
-  useReactFlow,
   addEdge,
-  type Connection,
   type Node,
   type Edge,
+  type Connection,
 } from '@xyflow/react'
-import '@xyflow/react/dist/style.css'
 import { Logo } from './Logo'
 import { useAppStore } from '../store'
-import { nodeTypes } from './nodes'
-import { edgeTypes } from './edges'
 import { useFlowStore } from '../store/flowStore'
+import { useUndoRedo } from '../hooks/useUndoRedo'
 import { invoke } from '@tauri-apps/api/core'
-import type { HttpMethod } from './nodes/MethodNode'
-import { palettes, methodLabels } from '../constants'
+import type { HttpMethod } from '../types'
+
 import { useExecStore, type StoredResponse } from '../store/execStore'
 import { resolveVariables } from '../utils/resolveVariables'
+import { getUrlData, getMethodData } from '../utils/nodeData'
 import { NodeSearch } from './NodeSearch'
 import { MockApi } from './MockApi'
+import { Canvas } from './Canvas'
+import { NodeCard } from './NodeCard'
+import { ContextMenu } from './ContextMenu'
+import { ConfigPanel } from './ConfigPanel'
+import { HistoryModal } from './HistoryModal'
+import { GroupDeleteModal } from './GroupDeleteModal'
 
 type SidebarMode = 'options' | 'nodes'
 
@@ -32,89 +34,6 @@ const initialEdges: Edge[] = []
 
 const methodMap: Record<string, HttpMethod> = {
   get: 'GET', post: 'POST', update: 'UPDATE', delete: 'DELETE',
-}
-
-interface CanvasProps {
-  nodes: Node[]
-  edges: Edge[]
-  onNodesChange: (changes: any) => void
-  onEdgesChange: (changes: any) => void
-  onConnect: (params: any) => void
-  addNodeToCanvas: (type: string, pos?: { x: number; y: number }) => void
-  onNodeSelect: (node: Node | null) => void
-  onNodeContext: (event: React.MouseEvent, node: Node) => void
-}
-
-function Canvas({
-  nodes, edges, onNodesChange, onEdgesChange, onConnect,
-  addNodeToCanvas, onNodeSelect, onNodeContext,
-}: CanvasProps) {
-  const { screenToFlowPosition } = useReactFlow()
-  const addRef = useRef(addNodeToCanvas)
-  addRef.current = addNodeToCanvas
-
-  const onDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'move'
-  }, [])
-
-  const onDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault()
-      const type = event.dataTransfer.getData('application/reactflow')
-      if (!type) return
-      const position = screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      })
-      addRef.current(type, position)
-    },
-    [screenToFlowPosition],
-  )
-
-  const onNodeClick = useCallback(
-    (_: React.MouseEvent, node: Node) => {
-      onNodeSelect(node)
-    },
-    [onNodeSelect],
-  )
-
-  const onPaneClick = useCallback(() => {
-    onNodeSelect(null)
-  }, [onNodeSelect])
-
-  const handleContextMenu = useCallback(
-    (event: React.MouseEvent, node: Node) => {
-      event.preventDefault()
-      onNodeContext(event, node)
-    },
-    [onNodeContext],
-  )
-
-  return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onNodeClick={onNodeClick}
-      onNodeContextMenu={handleContextMenu}
-      onPaneClick={onPaneClick}
-      nodeTypes={nodeTypes}
-      edgeTypes={edgeTypes}
-      defaultEdgeOptions={{ type: 'animated' }}
-      zoomOnScroll={true}
-      zoomOnPinch={true}
-      panOnDrag={true}
-      fitView
-      style={{ width: '100%', height: '100%' }}
-    >
-      <Background />
-    </ReactFlow>
-  )
 }
 
 export function MainApp() {
@@ -128,11 +47,8 @@ export function MainApp() {
   const [showMockApi, setShowMockApi] = useState(false)
   const [groupDeleteInfo, setGroupDeleteInfo] = useState<{ node: Node; methods: Node[] } | null>(null)
   const takeSnapshot = useFlowStore((s) => s.takeSnapshot)
-  const undo = useFlowStore((s) => s.undo)
-  const redo = useFlowStore((s) => s.redo)
-  const canUndo = useFlowStore((s) => s.canUndo)
-  const canRedo = useFlowStore((s) => s.canRedo)
-  const setNodeData = useCallback((id: string, data: Partial<any>) => {
+  const { undo, redo, canUndo, canRedo } = useUndoRedo()
+  const setNodeData = useCallback((id: string, data: Record<string, unknown>) => {
     const node = nodes.find((n) => n.id === id)
     if (node && ('title' in data || 'url' in data)) {
       const mergedData = { ...node.data, ...data }
@@ -174,7 +90,7 @@ export function MainApp() {
     const methodNode = nodes.find((n) => n.id === nodeId)
     if (!methodNode) return
 
-    const methodData = (methodNode.data as any) ?? {}
+    const methodData = getMethodData(methodNode)
     const repeatCount = methodData.repeatCount ?? 1
 
     setLoading(nodeId, true)
@@ -200,7 +116,7 @@ export function MainApp() {
       const sourceNode = methodIncomingEdges.length > 0
         ? nodes.find((n) => n.id === methodIncomingEdges[0].source)
         : null
-      const sourceData = (sourceNode?.data as any) ?? {}
+      const sourceData = sourceNode ? getUrlData(sourceNode) : {}
 
       let rawUrl = (sourceData.url as string) || ''
       // Resolve variables first, then add http:// prefix if needed
@@ -263,19 +179,20 @@ export function MainApp() {
   }, [nodes, edges, setNodeData, setLoading, setResponse])
 
   const saveGroupsToHistory = useCallback(() => {
-    const urlNodes = nodes.filter((n) => n.type === 'url' && (n.data as any)?.title)
+    const urlNodes = nodes.filter((n) => n.type === 'url' && getUrlData(n).title)
     if (urlNodes.length === 0) return
     const existing: any[] = JSON.parse(localStorage.getItem('greq-history') || '[]')
     for (const urlNode of urlNodes) {
-      const title = (urlNode.data as any).title
+      const { title, url } = getUrlData(urlNode)
+      if (!title) continue
       const methodEdges = edges.filter((e) => e.source === urlNode.id)
       const methodNodes = methodEdges
         .map((e) => nodes.find((n) => n.id === e.target))
         .filter(Boolean) as Node[]
       const entry = {
         id: urlNode.id,
-        title,
-        url: (urlNode.data as any).url || '',
+        title: title || '',
+        url: url || '',
         timestamp: Date.now(),
         methodCount: methodNodes.length,
         nodes: [urlNode, ...methodNodes],
@@ -322,7 +239,7 @@ export function MainApp() {
   }, [nodes, edges, setNodes, setEdges, takeSnapshot])
 
   const deleteNode = useCallback((node: Node) => {
-    const title = (node.data as any)?.title
+    const title = getUrlData(node).title
     if (node.type === 'url' && title) {
       const methods = edges
         .filter((e) => e.source === node.id)
@@ -458,7 +375,7 @@ export function MainApp() {
             <div className="w-px h-4 bg-zinc-200" />
             <button
               onClick={undo}
-              disabled={!canUndo()}
+              disabled={!canUndo}
               className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
               title="Deshacer (Ctrl+Z)"
             >
@@ -468,7 +385,7 @@ export function MainApp() {
             </button>
             <button
               onClick={redo}
-              disabled={!canRedo()}
+              disabled={!canRedo}
               className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
               title="Rehacer (Ctrl+Shift+Z)"
             >
@@ -664,589 +581,4 @@ export function MainApp() {
   )
 }
 
-function ResponseSection({ node, setNodeData }: { node: Node; setNodeData: (id: string, data: Partial<any>) => void }) {
-  const d = (node.data as any) ?? {}
-  const responsesList = d.responses as any[] | undefined
-  const singleRes = d.response as any
 
-  const allRes = responsesList ?? (singleRes ? [singleRes] : [])
-  if (allRes.length === 0) return null
-
-  return (
-    <div className="space-y-3 border-t border-zinc-100 pt-4">
-      <div className="flex items-center justify-between">
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em]">
-          {allRes.length > 1 ? `Respuestas (${allRes.length})` : 'Respuesta'}
-        </label>
-        <button
-          onClick={() => setNodeData(node.id, { response: undefined, responses: undefined })}
-          className="text-[9px] text-zinc-400 hover:text-zinc-600 transition-colors"
-        >
-          Limpiar
-        </button>
-      </div>
-
-      {allRes.map((res: any, idx: number) => {
-        const statusColor =
-          res.status >= 200 && res.status < 300 ? 'text-emerald-500'
-          : res.status >= 300 && res.status < 400 ? 'text-amber-500'
-          : res.status >= 400 ? 'text-red-500'
-          : 'text-zinc-500'
-
-        return (
-          <div key={idx}>
-            {allRes.length > 1 && (
-              <div className="flex items-center gap-2 mb-2">
-                <div className="h-px flex-1 bg-zinc-100" />
-                <span className="text-[9px] font-medium text-zinc-400">{idx + 1}/{allRes.length}</span>
-                <div className="h-px flex-1 bg-zinc-100" />
-              </div>
-            )}
-            <div className="flex items-center gap-2 mb-2">
-              <span className={`text-xs font-bold ${statusColor}`}>{res.status}</span>
-              <span className="text-[10px] text-zinc-500">{res.statusText}</span>
-              <span className="text-[9px] text-zinc-400 ml-auto">{res.durationMs}ms</span>
-            </div>
-
-            <details className="group mb-2">
-              <summary className="text-[10px] font-medium text-zinc-500 cursor-pointer hover:text-zinc-700 transition-colors list-none flex items-center gap-1.5">
-                <svg className="w-3 h-3 text-zinc-400 group-open:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-                Headers ({res.headers?.length ?? 0})
-              </summary>
-              <div className="mt-1.5 space-y-0.5 max-h-36 overflow-y-auto">
-                {(res.headers as { key: string; value: string }[] ?? []).map((h: any, i: number) => (
-                  <div key={i} className="flex gap-2 text-[9px] font-mono">
-                    <span className="text-zinc-500 shrink-0">{h.key}:</span>
-                    <span className="text-zinc-700 break-all">{h.value}</span>
-                  </div>
-                ))}
-              </div>
-            </details>
-
-            <div className="mb-3">
-              <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Body</label>
-              <pre className="w-full max-h-60 overflow-auto bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-2 text-[10px] font-mono text-zinc-700 leading-relaxed whitespace-pre-wrap break-all">
-                {res.body}
-              </pre>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-/* ─── Premium mini node cards ─── */
-
-function NodeCard({ type, onAdd }: { type: string; onAdd: (type: string, pos?: { x: number; y: number }) => void }) {
-  const c = palettes[type as keyof typeof palettes] ?? palettes.get
-  const isUrl = type === 'url'
-
-  const onDragStart = (event: React.DragEvent) => {
-    event.dataTransfer.setData('application/reactflow', type)
-    event.dataTransfer.effectAllowed = 'move'
-  }
-
-  return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onClick={() => onAdd(type)}
-      className="cursor-grab active:cursor-grabbing select-none transition-all active:scale-[0.97]"
-    >
-      <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white border border-zinc-200/70 shadow-sm hover:shadow-md hover:border-zinc-300/80 transition-all">
-        <div
-          className="w-2 h-2 rounded-full shrink-0"
-          style={{ backgroundColor: isUrl ? '#10b981' : c.dot }}
-        />
-        <span className="text-xs font-semibold text-zinc-700">{isUrl ? 'URL' : c.label}</span>
-        <span className="text-[9px] text-zinc-400 ml-auto">{isUrl ? 'Enlace' : 'Solicitud'}</span>
-      </div>
-    </div>
-  )
-}
-
-/* ─── Context Menu ─── */
-
-function ContextMenu({ x, y, onDuplicate, onDelete, onClose }: {
-  x: number; y: number
-  onDuplicate: () => void
-  onDelete: () => void
-  onClose: () => void
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as HTMLElement)) {
-        onClose()
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [onClose])
-
-  return (
-    <div
-      ref={ref}
-      className="fixed z-50 w-40 bg-white rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] border border-zinc-200/80 py-1.5 overflow-hidden"
-      style={{ left: x, top: y }}
-    >
-      <button
-        onClick={() => { onDuplicate(); onClose() }}
-        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
-      >
-        <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-        </svg>
-        Duplicar
-      </button>
-      <button
-        onClick={() => { onDelete(); onClose() }}
-        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-red-600 hover:bg-red-50 transition-colors"
-      >
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-        </svg>
-        Eliminar
-      </button>
-    </div>
-  )
-}
-
-/* ─── Node Config Panel ─── */
-
-function ConfigPanel({ node, setNodeData, onClose }: {
-  node: Node
-  setNodeData: (id: string, data: Partial<any>) => void
-  onClose: () => void
-}) {
-  const isUrl = node.type === 'url'
-  const isMethod = node.type === 'method'
-
-  return (
-    <aside className="w-72 flex-shrink-0 border-l border-zinc-200/70 bg-white flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100">
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isUrl ? 'bg-emerald-400' : 'bg-blue-400'}`} />
-          <span className="text-xs font-semibold text-zinc-700 capitalize">
-            {node.type === 'url' ? 'URL' : (node.data as any)?.method || 'Method'}
-          </span>
-        </div>
-        <button
-          onClick={onClose}
-          className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-all"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {isUrl && <UrlConfig node={node} setNodeData={setNodeData} />}
-        {isMethod && <MethodConfig node={node} setNodeData={setNodeData} />}
-        {isMethod && <VariablesHint />}
-        {(node.data as any)?.response && <ResponseSection node={node} setNodeData={setNodeData} />}
-      </div>
-    </aside>
-  )
-}
-
-function KeyValueEditor({ pairs, onChange, keyLabel, valueLabel }: {
-  pairs: { key: string; value: string }[]
-  onChange: (pairs: { key: string; value: string }[]) => void
-  keyLabel?: string
-  valueLabel?: string
-}) {
-  const add = () => onChange([...pairs, { key: '', value: '' }])
-  const remove = (i: number) => onChange(pairs.filter((_, idx) => idx !== i))
-  const update = (i: number, field: 'key' | 'value', val: string) => {
-    onChange(pairs.map((p, idx) => idx === i ? { ...p, [field]: val } : p))
-  }
-
-  return (
-    <div className="space-y-1.5">
-      {pairs.map((p, i) => (
-        <div key={i} className="flex gap-1.5 items-center">
-          <input
-            value={p.key} onChange={(e) => update(i, 'key', e.target.value)}
-            placeholder={keyLabel ?? 'Key'}
-            className="flex-1 min-w-0 bg-zinc-50 border border-zinc-200/80 rounded-lg px-2 py-1.5 text-[11px] text-zinc-700 outline-none focus:border-emerald-400 transition-all"
-          />
-          <input
-            value={p.value} onChange={(e) => update(i, 'value', e.target.value)}
-            placeholder={valueLabel ?? 'Value'}
-            className="flex-1 min-w-0 bg-zinc-50 border border-zinc-200/80 rounded-lg px-2 py-1.5 text-[11px] text-zinc-700 outline-none focus:border-emerald-400 transition-all"
-          />
-          <button
-            onClick={() => remove(i)}
-            className="shrink-0 w-5 h-5 flex items-center justify-center rounded text-zinc-300 hover:text-red-400 hover:bg-red-50 transition-colors"
-          >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      ))}
-      <button
-        onClick={add}
-        className="text-[10px] font-medium text-emerald-500 hover:text-emerald-600 transition-colors"
-      >
-        + Añadir
-      </button>
-    </div>
-  )
-}
-
-function UrlConfig({ node, setNodeData }: { node: Node; setNodeData: (id: string, data: Partial<any>) => void }) {
-  const d = (node.data as any) ?? {}
-  const [url, setUrl] = useState(d.url ?? '')
-  const [groupTitle, setGroupTitle] = useState(d.title ?? '')
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Nombre del grupo</label>
-        <input
-          value={groupTitle}
-          onChange={(e) => {
-            setGroupTitle(e.target.value)
-            setNodeData(node.id, { title: e.target.value })
-          }}
-          placeholder="e.g. Obtener usuario"
-          className="w-full bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-2 text-xs font-medium text-zinc-700 placeholder:text-zinc-400 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/15 transition-all"
-        />
-      </div>
-
-      <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">URL</label>
-        <input
-          value={url}
-          onChange={(e) => {
-            setUrl(e.target.value)
-            setNodeData(node.id, { url: e.target.value })
-          }}
-          placeholder="https://api.ejemplo.com"
-          className="w-full bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-2 text-xs font-mono text-zinc-700 placeholder:text-zinc-400 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/15 transition-all"
-        />
-      </div>
-
-      <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Headers</label>
-        <KeyValueEditor
-          pairs={d.headers ?? []}
-          onChange={(headers) => setNodeData(node.id, { headers })}
-        />
-      </div>
-
-      <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Query Params</label>
-        <KeyValueEditor
-          pairs={d.params ?? []}
-          onChange={(params) => setNodeData(node.id, { params })}
-        />
-      </div>
-    </div>
-  )
-}
-
-function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (id: string, data: Partial<any>) => void }) {
-  const d = (node.data as any) ?? {}
-  const method = d.method as string
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Method</label>
-        <div className="flex gap-1">
-          {['GET', 'POST', 'DELETE', 'UPDATE'].map((m) => {
-            const p = palettes[methodLabels[m] as keyof typeof palettes]
-            return (
-              <button
-                key={m}
-                onClick={() => setNodeData(node.id, { method: m })}
-                className={`flex-1 px-2 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
-                  method === m
-                    ? 'text-white shadow-sm'
-                    : 'text-zinc-400 bg-zinc-50 hover:bg-zinc-100'
-                }`}
-                style={method === m && p ? {
-                  background: `linear-gradient(135deg, ${p.from}, ${p.to})`,
-                } : undefined}
-              >
-                {m}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Repetir</label>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            min={1}
-            max={99}
-            value={d.repeatCount ?? 1}
-            onChange={(e) => setNodeData(node.id, { repeatCount: parseInt(e.target.value) || 1 })}
-            className="w-14 bg-zinc-50 border border-zinc-200/80 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400 transition-all"
-          />
-          <span className="text-[10px] text-zinc-400">veces</span>
-        </div>
-      </div>
-
-      <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Headers</label>
-        <KeyValueEditor
-          pairs={d.headers ?? []}
-          onChange={(headers) => setNodeData(node.id, { headers })}
-        />
-      </div>
-
-      <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Body</label>
-        <div className="flex gap-1 mb-2">
-          {['json', 'text', 'form'].map((t) => (
-            <button
-              key={t}
-              onClick={() => setNodeData(node.id, { bodyType: t })}
-              className={`px-2.5 py-1 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all ${
-                (d.bodyType ?? 'json') === t ? 'bg-zinc-800 text-white' : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-        {(d.bodyType ?? 'json') === 'json' && (
-          <textarea
-            value={d.body ?? '{\n  \n}'}
-            onChange={(e) => setNodeData(node.id, { body: e.target.value })}
-            className="w-full h-28 bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-2 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/15 transition-all resize-none"
-          />
-        )}
-        {(d.bodyType ?? 'json') === 'text' && (
-          <textarea
-            value={d.body ?? ''}
-            onChange={(e) => setNodeData(node.id, { body: e.target.value })}
-            placeholder="Texto plano..."
-            className="w-full h-28 bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-2 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/15 transition-all resize-none"
-          />
-        )}
-        {(d.bodyType ?? 'json') === 'form' && (
-          <KeyValueEditor
-            pairs={d.body ? JSON.parse(d.body) : [{ key: '', value: '' }]}
-            onChange={(pairs) => setNodeData(node.id, { body: JSON.stringify(pairs) })}
-          />
-        )}
-      </div>
-
-      <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Auth</label>
-        <div className="flex gap-1">
-          {['None', 'Basic', 'Bearer'].map((a) => (
-            <button
-              key={a}
-              onClick={() => setNodeData(node.id, { auth: a })}
-              className={`px-2.5 py-1 rounded-lg text-[9px] font-medium transition-all ${
-                (d.auth ?? 'None') === a ? 'bg-zinc-800 text-white' : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100'
-              }`}
-            >
-              {a}
-            </button>
-          ))}
-        </div>
-        {(d.auth === 'Basic' || d.auth === 'Bearer') && (
-          <input
-            value={d.authValue ?? ''}
-            onChange={(e) => setNodeData(node.id, { authValue: e.target.value })}
-            placeholder={d.auth === 'Bearer' ? 'Token' : 'usuario:contraseña'}
-            className="w-full bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-1.5 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400 transition-all"
-          />
-        )}
-      </div>
-    </div>
-  )
-}
-
-/* ─── History Modal ─── */
-
-interface HistoryEntry {
-  id: string
-  title: string
-  url: string
-  timestamp: number
-  methodCount: number
-  nodes: Node[]
-  edges: Edge[]
-}
-
-function HistoryModal({ onClose, onRetomar }: { onClose: () => void; onRetomar: (entry: HistoryEntry) => void }) {
-  const [entries, setEntries] = useState<HistoryEntry[]>([])
-
-  useEffect(() => {
-    try {
-      setEntries(JSON.parse(localStorage.getItem('greq-history') || '[]'))
-    } catch { setEntries([]) }
-  }, [])
-
-  const removeEntry = (id: string) => {
-    const next = entries.filter((e) => e.id !== id)
-    setEntries(next)
-    localStorage.setItem('greq-history', JSON.stringify(next))
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] border border-zinc-200/80 w-full max-w-lg max-h-[70vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-100">
-          <span className="text-sm font-semibold text-zinc-800">Historial de grupos</span>
-          <button onClick={onClose} className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-all">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {entries.length === 0 && (
-            <p className="text-xs text-zinc-400 text-center py-8">No hay grupos guardados aún.</p>
-          )}
-          {entries.map((entry) => (
-            <div key={entry.id} className="flex items-center gap-3 p-3 rounded-xl bg-zinc-50 border border-zinc-200/60">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-semibold text-zinc-800 truncate">{entry.title}</span>
-                  <span className="text-[9px] text-zinc-400 shrink-0">{new Date(entry.timestamp).toLocaleDateString()}</span>
-                </div>
-                <div className="text-[10px] font-mono text-zinc-400 truncate mb-1.5">{entry.url || 'Sin URL'}</div>
-                <div className="flex items-center gap-1">
-                  {entry.nodes.filter((n: any) => n.type === 'method').map((n: any) => {
-                    const p = palettes[methodLabels[n.data?.method] as keyof typeof palettes]
-                    return <div key={n.id} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: p?.dot ?? '#a1a1aa' }} />
-                  })}
-                  <span className="text-[9px] text-zinc-400 ml-1">{entry.methodCount} petición{entry.methodCount !== 1 ? 'es' : ''}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  onClick={() => onRetomar(entry)}
-                  className="px-2.5 py-1.5 rounded-lg text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-all"
-                >
-                  Retomar
-                </button>
-                <button
-                  onClick={() => removeEntry(entry.id)}
-                  className="px-2.5 py-1.5 rounded-lg text-[10px] font-medium text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-all"
-                >
-                  Eliminar
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ─── Group Delete Modal ─── */
-
-function GroupDeleteModal({ node, methods, onDeleteGroup, onDeleteNode, onCancel }: {
-  node: Node
-  methods: Node[]
-  onDeleteGroup: () => void
-  onDeleteNode: () => void
-  onCancel: () => void
-}) {
-  const title = (node.data as any)?.title || 'Sin título'
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={onCancel}>
-      <div className="bg-white rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] border border-zinc-200/80 w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 rounded-xl bg-red-50 flex items-center justify-center">
-            <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-            </svg>
-          </div>
-          <div>
-            <span className="text-sm font-semibold text-zinc-800">Eliminar grupo</span>
-            <p className="text-[11px] text-zinc-500">"{title}" está conectado a {methods.length} peticion{methods.length !== 1 ? 'es' : ''}</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 mb-4 pl-11">
-          {methods.map((m) => {
-            const p = palettes[methodLabels[(m.data as any)?.method] as keyof typeof palettes]
-            return (
-              <span key={m.id} className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase" style={{ backgroundColor: `${p?.dot}15`, color: p?.dot }}>
-                {(m.data as any)?.method || 'GET'}
-              </span>
-            )
-          })}
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <button
-            onClick={onDeleteGroup}
-            className="w-full py-2 rounded-xl text-xs font-semibold bg-red-500 text-white hover:bg-red-600 active:scale-[0.98] transition-all"
-          >
-            Eliminar todo el grupo
-          </button>
-          <button
-            onClick={onDeleteNode}
-            className="w-full py-2 rounded-xl text-xs font-medium text-zinc-600 bg-zinc-100 hover:bg-zinc-200 active:scale-[0.98] transition-all"
-          >
-            Eliminar solo el nodo base
-          </button>
-          <button
-            onClick={onCancel}
-            className="w-full py-2 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-600 active:scale-[0.98] transition-all"
-          >
-            Cancelar
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function VariablesHint() {
-  const responses = useExecStore((s) => s.responses)
-  const entries = Object.entries(responses)
-  if (entries.length === 0) return null
-
-  return (
-    <div className="space-y-2">
-      <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Variables disponibles</label>
-      <div className="space-y-1.5 max-h-40 overflow-y-auto">
-        {entries.map(([id, res]) => {
-          const isJson = res.body.startsWith('{') || res.body.startsWith('[')
-          return (
-            <details key={id} className="text-[10px]">
-              <summary className="cursor-pointer text-zinc-600 hover:text-zinc-800 font-medium">
-                {id.slice(0, 8)}
-                <span className="text-zinc-400 ml-1">({res.status})</span>
-              </summary>
-              <div className="mt-1 ml-2 space-y-0.5">
-                <code className="block text-zinc-500 font-mono text-[9px]">$prev.status</code>
-                <code className="block text-zinc-500 font-mono text-[9px]">$prev.headers.X-*</code>
-                {isJson && (
-                  <>
-                    <code className="block text-zinc-500 font-mono text-[9px]">$prev.body</code>
-                    <code className="block text-zinc-500 font-mono text-[9px]">$prev.body.path.to.field</code>
-                  </>
-                )}
-              </div>
-            </details>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
