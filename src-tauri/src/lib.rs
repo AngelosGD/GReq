@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Instant;
 use thiserror::Error;
 
+mod auth;
 mod mock;
 
 #[derive(Debug, Error)]
@@ -162,11 +163,15 @@ async fn make_request(input: RequestInput) -> Result<ResponseOutput, AppError> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .manage(mock::MockManager::new())
+        .manage(auth::OAuthState::default())
         .invoke_handler(tauri::generate_handler![
             make_request,
             mock::start_mock_server,
-            mock::stop_mock_server
+            mock::stop_mock_server,
+            auth::start_oauth_server,
+            auth::wait_oauth_callback,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

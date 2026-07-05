@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { useAuthStore } from '../store/authStore'
+import { getMockApis, saveMockApi, deleteMockApi } from '../lib/database'
 
 interface Props {
   onClose: () => void
@@ -38,15 +40,37 @@ const randomPort = () => Math.floor(Math.random() * 10000) + 30000
 const defaultBody = JSON.stringify({ id: 1, name: 'John Doe' }, null, 2)
 
 export function MockApi({ onClose }: Props) {
+  const user = useAuthStore((s) => s.user)
   const [filter, setFilter] = useState<FilterMethod>('Todas')
   const [search, setSearch] = useState('')
   const [mockApis, setMockApis] = useState<MockApiItem[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+      const raw = localStorage.getItem(STORAGE_KEY)
+      return raw ? JSON.parse(raw) : []
     } catch {
       return []
     }
   })
+
+  useEffect(() => {
+    if (user) {
+      getMockApis(user.$id).then((apis) => {
+        const items: MockApiItem[] = (apis as any[]).map((a) => ({
+          id: a.id,
+          name: a.name ?? '',
+          method: a.method ?? 'GET',
+          path: a.path ?? '',
+          port: a.port ?? 0,
+          running: a.isRunning ?? false,
+          serverId: a.serverId ?? null,
+          statusCode: a.statusCode ?? 200,
+          responseBody: a.responseBody ?? '',
+        }))
+        setMockApis(items)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+      }).catch(() => {})
+    }
+  }, [user])
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
@@ -61,7 +85,22 @@ export function MockApi({ onClose }: Props) {
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(mockApis.slice(0, 20)))
-  }, [mockApis])
+    if (user) {
+      for (const api of mockApis) {
+        saveMockApi(user.$id, {
+          id: api.id,
+          name: api.name,
+          path: api.path,
+          method: api.method,
+          statusCode: api.statusCode,
+          responseBody: api.responseBody,
+          port: api.port,
+          isRunning: api.running,
+          serverId: api.serverId,
+        }).catch(() => {})
+      }
+    }
+  }, [mockApis, user])
 
   const resetForm = () => {
     setFormName('')
@@ -190,6 +229,9 @@ export function MockApi({ onClose }: Props) {
     }
     setMockApis((a) => a.filter((x) => x.id !== api.id))
     setTabs((t) => t.map((tab) => (tab.apiId === api.id ? { ...tab, apiId: null } : tab)))
+    if (user) {
+      deleteMockApi(user.$id, api.id).catch(() => {})
+    }
     setDeleteTarget(null)
   }
 

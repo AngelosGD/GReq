@@ -1,5 +1,16 @@
 import { useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { Logo } from './Logo'
+import {
+  signInWithEmail,
+  signUpWithEmail,
+  getOAuthUrl,
+  completeOAuth,
+  OAuthProvider,
+  getCurrentUser,
+} from '../lib/appwrite'
+import { useAuthStore } from '../store/authStore'
 
 type AuthMode = 'signin' | 'signup'
 
@@ -32,10 +43,49 @@ export function AuthPage({ onSuccess }: Props) {
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const setUser = useAuthStore((s) => s.setUser)
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  async function onLoginSuccess() {
+    const user = await getCurrentUser()
+    if (user) setUser(user)
     onSuccess()
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      if (mode === 'signin') {
+        await signInWithEmail(email, password)
+      } else {
+        await signUpWithEmail(name, email, password)
+      }
+      await onLoginSuccess()
+    } catch (err: any) {
+      setError(err?.message || err?.type || err?.response?.message || 'Error al iniciar sesión')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleOAuth(provider: OAuthProvider) {
+    setError('')
+    setLoading(true)
+    try {
+      const port = await invoke<number>('start_oauth_server')
+      const url = await getOAuthUrl(provider, port)
+      await openUrl(url)
+      const { userId, secret } = await invoke<{ userId: string; secret: string }>('wait_oauth_callback', { port })
+      await completeOAuth(userId, secret)
+      await onLoginSuccess()
+    } catch (err: any) {
+      setError(err?.message || err?.type || 'Error al iniciar sesión con el proveedor')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -57,27 +107,39 @@ export function AuthPage({ onSuccess }: Props) {
           </p>
         </div>
 
+        {error && (
+          <div className="mb-6 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium text-center">
+            {error}
+          </div>
+        )}
+
         <div className="flex gap-3 mb-8">
           <button
             type="button"
+            disabled={loading}
+            onClick={() => handleOAuth(OAuthProvider.Google)}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl
                        border border-zinc-300 dark:border-zinc-700
                        bg-white dark:bg-zinc-900
                        text-zinc-700 dark:text-zinc-300
                        hover:bg-zinc-50 dark:hover:bg-zinc-800
-                       active:scale-[0.98] transition-all duration-200 text-sm font-medium"
+                       active:scale-[0.98] transition-all duration-200 text-sm font-medium
+                       disabled:opacity-50 disabled:cursor-wait"
           >
             <GoogleIcon />
             Google
           </button>
           <button
             type="button"
+            disabled={loading}
+            onClick={() => handleOAuth(OAuthProvider.Github)}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl
                        border border-zinc-300 dark:border-zinc-700
                        bg-white dark:bg-zinc-900
                        text-zinc-700 dark:text-zinc-300
                        hover:bg-zinc-50 dark:hover:bg-zinc-800
-                       active:scale-[0.98] transition-all duration-200 text-sm font-medium"
+                       active:scale-[0.98] transition-all duration-200 text-sm font-medium
+                       disabled:opacity-50 disabled:cursor-wait"
           >
             <GithubIcon />
             GitHub
@@ -97,7 +159,7 @@ export function AuthPage({ onSuccess }: Props) {
 
         <div className="flex mb-8 bg-zinc-100 dark:bg-zinc-800 rounded-xl p-1">
           <button
-            onClick={() => setMode('signin')}
+            onClick={() => { setMode('signin'); setError('') }}
             className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
               mode === 'signin'
                 ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm'
@@ -107,7 +169,7 @@ export function AuthPage({ onSuccess }: Props) {
             Iniciar Sesión
           </button>
           <button
-            onClick={() => setMode('signup')}
+            onClick={() => { setMode('signup'); setError('') }}
             className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
               mode === 'signup'
                 ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm'
@@ -153,6 +215,7 @@ export function AuthPage({ onSuccess }: Props) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="ejemplo@correo.com"
+                required
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700
                            bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white
                            placeholder:text-zinc-400 dark:placeholder:text-zinc-600
@@ -176,6 +239,7 @@ export function AuthPage({ onSuccess }: Props) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
+                required
                 className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700
                            bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white
                            placeholder:text-zinc-400 dark:placeholder:text-zinc-600
@@ -199,26 +263,30 @@ export function AuthPage({ onSuccess }: Props) {
                 )}
               </button>
             </div>
-            {mode === 'signin' && (
-              <div className="flex justify-end mt-1.5">
-                <button type="button" className="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors">
-                  ¿Olvidaste tu contraseña?
-                </button>
-              </div>
-            )}
           </div>
 
           <button
             type="submit"
+            disabled={loading}
             className="w-full py-2.5 rounded-xl text-sm font-semibold
                        bg-zinc-900 dark:bg-white text-white dark:text-zinc-900
                        hover:bg-zinc-800 dark:hover:bg-zinc-200
                        active:scale-[0.98] transition-all duration-200
-                       shadow-sm shadow-zinc-900/10"
+                       shadow-sm shadow-zinc-900/10
+                       disabled:opacity-50 disabled:cursor-wait"
           >
-            {mode === 'signin' ? 'Iniciar Sesión' : 'Crear Cuenta'}
+            {loading ? 'Cargando...' : mode === 'signin' ? 'Iniciar Sesión' : 'Crear Cuenta'}
           </button>
         </form>
+
+        <div className="mt-6 text-center">
+          <button
+            onClick={onSuccess}
+            className="text-[11px] font-medium text-zinc-400 hover:text-zinc-600 transition-colors"
+          >
+            Entrar como invitado
+          </button>
+        </div>
       </div>
     </div>
   )

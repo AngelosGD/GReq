@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   ReactFlowProvider,
   useNodesState,
@@ -24,6 +24,11 @@ import { Canvas } from './Canvas'
 import { NodeCard } from './NodeCard'
 import { ContextMenu } from './ContextMenu'
 import { ConfigPanel } from './ConfigPanel'
+import { AuthGuard } from './AuthGuard'
+import { ProfileModal } from './ProfileModal'
+import { signOut } from '../lib/appwrite'
+import { useAuthStore } from '../store/authStore'
+import { saveHistoryEntry } from '../lib/database'
 import { HistoryModal } from './HistoryModal'
 import { GroupDeleteModal } from './GroupDeleteModal'
 
@@ -38,6 +43,7 @@ const methodMap: Record<string, HttpMethod> = {
 
 export function MainApp() {
   const goToSettings = useAppStore((s) => s.goToSettings)
+  const goToAuth = useAppStore((s) => s.goToAuth)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('options')
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
@@ -46,6 +52,10 @@ export function MainApp() {
   const [showHistory, setShowHistory] = useState(false)
   const [showMockApi, setShowMockApi] = useState(false)
   const [groupDeleteInfo, setGroupDeleteInfo] = useState<{ node: Node; methods: Node[] } | null>(null)
+  const [showProfile, setShowProfile] = useState(false)
+  const user = useAuthStore((s) => s.user)
+  const setUser = useAuthStore((s) => s.setUser)
+  const gearRef = useRef<HTMLDivElement>(null)
   const takeSnapshot = useFlowStore((s) => s.takeSnapshot)
   const { undo, redo, canUndo, canRedo } = useUndoRedo()
   const setNodeData = useCallback((id: string, data: Record<string, unknown>) => {
@@ -59,8 +69,8 @@ export function MainApp() {
           .filter(Boolean) as Node[]
         const entry = {
           id,
-          title: mergedData.title,
-          url: mergedData.url || '',
+          title: String(mergedData.title || ''),
+          url: String(mergedData.url || ''),
           timestamp: Date.now(),
           methodCount: methodNodes.length,
           nodes: [{ ...node, data: mergedData }, ...methodNodes],
@@ -71,6 +81,9 @@ export function MainApp() {
         if (idx >= 0) existing[idx] = entry
         else existing.unshift(entry)
         localStorage.setItem('greq-history', JSON.stringify(existing.slice(0, 20)))
+        if (user) {
+          saveHistoryEntry(user.$id, entry).catch(() => {})
+        }
       }
     }
     setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...data } } : n)))
@@ -288,6 +301,38 @@ export function MainApp() {
     [setEdges, takeSnapshot, nodes, edges],
   )
 
+  /* Sync history when edges change for URL nodes with titles */
+  const prevEdgeLen = useRef(edges.length)
+  useEffect(() => {
+    if (edges.length === prevEdgeLen.current) return
+    prevEdgeLen.current = edges.length
+    for (const urlNode of nodes.filter((n) => n.type === 'url')) {
+      const data = getUrlData(urlNode)
+      if (!data.title) continue
+      const methodEdges = edges.filter((e) => e.source === urlNode.id)
+      const methodNodes = methodEdges
+        .map((e) => nodes.find((n) => n.id === e.target))
+        .filter(Boolean) as Node[]
+      const entry = {
+        id: urlNode.id,
+        title: data.title || '',
+        url: String(data.url || ''),
+        timestamp: Date.now(),
+        methodCount: methodNodes.length,
+        nodes: [urlNode, ...methodNodes],
+        edges: methodEdges,
+      }
+      const existing: any[] = JSON.parse(localStorage.getItem('greq-history') || '[]')
+      const idx = existing.findIndex((h: any) => h.id === urlNode.id)
+      if (idx >= 0) existing[idx] = entry
+      else existing.unshift(entry)
+      localStorage.setItem('greq-history', JSON.stringify(existing.slice(0, 20)))
+      if (user) {
+        saveHistoryEntry(user.$id, entry).catch(() => {})
+      }
+    }
+  }, [nodes, edges, user])
+
   /* Keyboard shortcuts */
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -415,17 +460,50 @@ export function MainApp() {
               Cargar
             </button>
           </div>
-          <NodeSearch nodes={nodes} edges={edges} />
-          <button
-            onClick={goToSettings}
-            className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 active:scale-95 transition-all"
-            aria-label="Configuración"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
+          <AuthGuard label="Inicia sesión para buscar grupos guardados">
+            <NodeSearch nodes={nodes} edges={edges} />
+          </AuthGuard>
+          <div className="relative group" ref={gearRef}>
+            <button
+              onClick={goToSettings}
+              className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 active:scale-95 transition-all"
+              aria-label="Configuración"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.431-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+            {user && (
+              <div className="absolute right-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-zinc-200/80 z-30 py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                <div className="px-3 py-2 text-[11px] text-zinc-500 truncate border-b border-zinc-100">
+                  {user.email}
+                </div>
+                <button
+                  onClick={() => setShowProfile(true)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                  </svg>
+                  Perfil
+                </button>
+                <button
+                  onClick={async () => {
+                    await signOut()
+                    setUser(null)
+                    goToAuth()
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                  </svg>
+                  Cerrar sesión
+                </button>
+              </div>
+            )}
+          </div>
         </header>
 
         <div className="flex flex-1 overflow-hidden">
@@ -445,6 +523,7 @@ export function MainApp() {
                   </svg>
                   Hacer peticiones
                 </button>
+                  <AuthGuard label="Inicia sesión para ver el historial de peticiones">
                   <button
                     onClick={() => setShowHistory(true)}
                     className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 active:scale-[0.98] transition-all"
@@ -454,6 +533,8 @@ export function MainApp() {
                     </svg>
                     Historial
                   </button>
+                  </AuthGuard>
+                  <AuthGuard label="Inicia sesión para usar la generación de APIs mock">
                   <button
                     onClick={() => { setShowMockApi(true); setSelectedNode(null); setSidebarMode('options'); }}
                     className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] ${
@@ -467,6 +548,7 @@ export function MainApp() {
                     </svg>
                     Generar API
                   </button>
+                  </AuthGuard>
                 </>
               ) : (
               <>
@@ -577,6 +659,8 @@ export function MainApp() {
           onCancel={() => setGroupDeleteInfo(null)}
         />
       )}
+
+      {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
     </ReactFlowProvider>
   )
 }

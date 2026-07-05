@@ -1,30 +1,32 @@
 import { useState, useEffect } from 'react'
-import type { Node, Edge } from '@xyflow/react'
 import { palettes, methodLabels } from '../constants'
-
-export interface HistoryEntry {
-  id: string
-  title: string
-  url: string
-  timestamp: number
-  methodCount: number
-  nodes: Node[]
-  edges: Edge[]
-}
+import { useAuthStore } from '../store/authStore'
+import { getHistory, deleteHistoryEntry, type HistoryEntry } from '../lib/database'
 
 export function HistoryModal({ onClose, onRetomar }: { onClose: () => void; onRetomar: (entry: HistoryEntry) => void }) {
   const [entries, setEntries] = useState<HistoryEntry[]>([])
+  const user = useAuthStore((s) => s.user)
 
   useEffect(() => {
-    try {
-      setEntries(JSON.parse(localStorage.getItem('greq-history') || '[]'))
-    } catch { setEntries([]) }
-  }, [])
+    if (user) {
+      getHistory(user.$id).then(setEntries).catch(() => setEntries([]))
+    } else {
+      try {
+        setEntries(JSON.parse(localStorage.getItem('greq-history') || '[]'))
+      } catch {
+        setEntries([])
+      }
+    }
+  }, [user])
 
-  const removeEntry = (id: string) => {
+  const removeEntry = async (id: string) => {
     const next = entries.filter((e) => e.id !== id)
     setEntries(next)
-    localStorage.setItem('greq-history', JSON.stringify(next))
+    if (user) {
+      await deleteHistoryEntry(user.$id, id)
+    } else {
+      localStorage.setItem('greq-history', JSON.stringify(next))
+    }
   }
 
   return (
