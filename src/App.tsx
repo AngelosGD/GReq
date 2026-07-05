@@ -6,6 +6,7 @@ import { MainApp } from './components/MainApp'
 import { SettingsPage } from './components/SettingsPage'
 import { getCurrentUser } from './lib/appwrite'
 import { useAuthStore } from './store/authStore'
+import { registerCloseHandler } from './lib/closeHandler'
 
 export function App() {
   const screen = useAppStore((s) => s.screen)
@@ -20,6 +21,7 @@ export function App() {
       }
       setCheckingSession(false)
     })
+    registerCloseHandler()
   }, [])
 
   if (checkingSession) {

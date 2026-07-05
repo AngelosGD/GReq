@@ -177,3 +177,14 @@ pub async fn stop_mock_server(
         None => Err(AppError::NotFound("Servidor no encontrado".to_string())),
     }
 }
+
+#[tauri::command]
+pub async fn stop_all_mock_servers(
+    state: tauri::State<'_, MockManager>,
+) -> Result<(), AppError> {
+    let mut servers = state.servers.lock().await;
+    for (_, tx) in servers.drain() {
+        let _ = tx.send(());
+    }
+    Ok(())
+}

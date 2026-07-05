@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useAuthStore } from '../store/authStore'
 import { getMockApis, saveMockApi, deleteMockApi } from '../lib/database'
+import { trackServer, untrackServer, getActiveServers } from '../lib/runningServers'
 
 const invokeWithTimeout = <T,>(cmd: string, args: Record<string, unknown>, ms = 4000): Promise<T> =>
   Promise.race([
@@ -127,6 +128,7 @@ export function MockApi({ onClose }: Props) {
   const [showModal, setShowModal] = useState(false)
 
   const [activeMethod, setActiveMethod] = useState('GET')
+  const [restoreList, setRestoreList] = useState<{ apiId: string; name: string; port: number }[]>([])
 
   const [formName, setFormName] = useState('')
   const [formMethods, setFormMethods] = useState<string[]>(['GET'])
@@ -160,6 +162,14 @@ export function MockApi({ onClose }: Props) {
       }
     }
   }, [mockApis, user])
+
+  useEffect(() => {
+    const saved = getActiveServers()
+    if (saved.length > 0) {
+      const existing = mockApis.filter((a) => saved.some((s) => s.apiId === a.id))
+      setRestoreList(existing.map((a) => ({ apiId: a.id, name: a.name, port: a.port })))
+    }
+  }, [])
 
   const handleAddField = () => {
     if (!formNewFieldName.trim()) return
@@ -227,10 +237,12 @@ export function MockApi({ onClose }: Props) {
         },
       })
       const url = new URL(info.url)
+      const port = Number(url.port)
+      trackServer({ id: info.id, apiId: api.id, name: api.name, port })
       setMockApis((a) =>
         a.map((x) =>
           x.id === api.id
-            ? { ...x, running: true, serverId: info.id, port: Number(url.port) }
+            ? { ...x, running: true, serverId: info.id, port }
             : x
         )
       )
@@ -246,9 +258,18 @@ export function MockApi({ onClose }: Props) {
     } catch {
       // server might already be down
     }
+    untrackServer(api.serverId)
     setMockApis((a) =>
       a.map((x) => (x.id === api.id ? { ...x, running: false, serverId: null } : x))
     )
+  }
+
+  const restoreServers = () => {
+    for (const item of restoreList) {
+      const api = mockApis.find((a) => a.id === item.apiId)
+      if (api) startApi(api)
+    }
+    setRestoreList([])
   }
 
   const createApi = () => {
@@ -526,6 +547,28 @@ export function MockApi({ onClose }: Props) {
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {restoreList.length > 0 && (
+          <div className="flex items-center justify-between px-6 py-3 bg-amber-50 border-b border-amber-200">
+            <p className="text-xs text-amber-800">
+              {restoreList.length} servidor(es) estaban activos antes de cerrar la app.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={restoreServers}
+                className="text-xs px-3 py-1 rounded-md bg-amber-600 text-white font-medium hover:bg-amber-700 transition-colors"
+              >
+                Restaurar
+              </button>
+              <button
+                onClick={() => setRestoreList([])}
+                className="text-xs px-3 py-1 rounded-md bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+              >
+                Ignorar
               </button>
             </div>
           </div>

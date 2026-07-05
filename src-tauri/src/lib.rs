@@ -170,6 +170,7 @@ pub fn run() {
             make_request,
             mock::start_mock_server,
             mock::stop_mock_server,
+            mock::stop_all_mock_servers,
             auth::start_oauth_server,
             auth::wait_oauth_callback,
         ])
