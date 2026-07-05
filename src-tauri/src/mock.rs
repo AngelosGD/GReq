@@ -127,7 +127,7 @@ pub async fn start_mock_server(
     });
 
     let app = Router::new()
-        .route("/{*path}", any(mock_handler))
+        .route("/*path", any(mock_handler))
         .with_state(server_state);
 
     let addr = match config.port {
