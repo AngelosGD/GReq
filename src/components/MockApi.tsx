@@ -3,7 +3,11 @@ import { invoke } from '@tauri-apps/api/core'
 import { useAuthStore } from '../store/authStore'
 import { getMockApis, saveMockApi, deleteMockApi } from '../lib/database'
 
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+const invokeWithTimeout = <T,>(cmd: string, args: Record<string, unknown>, ms = 4000): Promise<T> =>
+  Promise.race([
+    invoke<T>(cmd, args),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Tiempo de espera agotado — el backend Tauri no responde')), ms)),
+  ])
 
 interface Props {
   onClose: () => void
@@ -211,12 +215,8 @@ export function MockApi({ onClose }: Props) {
   }
 
   const startApi = async (api: MockApiItem) => {
-    if (!isTauri) {
-      alert('El servidor mock solo funciona en la aplicación de escritorio. Usa npm run tauri dev')
-      return
-    }
     try {
-      const info = await invoke<{ url: string; id: string }>('start_mock_server', {
+      const info = await invokeWithTimeout<{ url: string; id: string }>('start_mock_server', {
         config: {
           path: api.path,
           methods: api.methods,
