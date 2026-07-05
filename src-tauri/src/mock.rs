@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use axum::{
     extract::State,
-    http::StatusCode,
+    http::{Method, StatusCode},
     response::IntoResponse,
     routing::any,
     Router,
@@ -17,7 +17,7 @@ use crate::{AppError, HeaderPair};
 #[serde(rename_all = "camelCase")]
 pub struct MockConfig {
     pub path: String,
-    pub method: String,
+    pub methods: Vec<String>,
     pub status: u16,
     pub headers: Vec<HeaderPair>,
     pub body: String,
@@ -32,16 +32,46 @@ pub struct MockServerInfo {
 }
 
 struct ServerState {
+    methods: Vec<String>,
     status: u16,
     headers: Vec<HeaderPair>,
     body: String,
 }
 
-async fn mock_handler(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
-    let status = StatusCode::from_u16(state.status).unwrap_or(StatusCode::OK);
-    let mut resp = axum::response::Response::new(axum::body::Body::from(state.body.clone()));
+async fn mock_handler(
+    State(state): State<Arc<ServerState>>,
+    method: Method,
+    body: String,
+) -> axum::response::Response {
+    let method_str = method.to_string();
+
+    if !state.methods.iter().any(|m| m.eq_ignore_ascii_case(&method_str)) {
+        return StatusCode::METHOD_NOT_ALLOWED.into_response();
+    }
+
+    let (status, resp_body) = match method {
+        Method::GET => {
+            (StatusCode::from_u16(state.status).unwrap_or(StatusCode::OK), state.body.clone())
+        }
+        Method::POST => {
+            let b = if body.is_empty() { state.body.clone() } else { body };
+            (StatusCode::CREATED, b)
+        }
+        Method::DELETE => {
+            (StatusCode::OK, "{}".to_string())
+        }
+        _ => {
+            let b = if body.is_empty() { state.body.clone() } else { body };
+            (StatusCode::OK, b)
+        }
+    };
+
+    let mut resp = axum::response::Response::new(axum::body::Body::from(resp_body));
     *resp.status_mut() = status;
-    let headers = resp.headers_mut();
+    resp.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderValue::from_static("application/json"),
+    );
     for h in &state.headers {
         if h.key.is_empty() {
             continue;
@@ -50,7 +80,7 @@ async fn mock_handler(State(state): State<Arc<ServerState>>) -> impl IntoRespons
             axum::http::HeaderName::from_bytes(h.key.as_bytes()),
             axum::http::HeaderValue::from_bytes(h.value.as_bytes()),
         ) {
-            headers.insert(name, value);
+            resp.headers_mut().insert(name, value);
         }
     }
     resp
@@ -90,6 +120,7 @@ pub async fn start_mock_server(
     );
 
     let server_state = Arc::new(ServerState {
+        methods: config.methods.clone(),
         status: config.status,
         headers: config.headers.clone(),
         body: config.body.clone(),
