@@ -90,6 +90,18 @@ Genera el JSON:`
   return callAI(prompt, true)
 }
 
+function extractJson(text: string): string {
+  // remove markdown fences
+  let cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/\s*```/g, '').trim()
+  // find first { and last }
+  const start = cleaned.indexOf('{')
+  const end = cleaned.lastIndexOf('}')
+  if (start !== -1 && end !== -1 && end > start) {
+    cleaned = cleaned.slice(start, end + 1)
+  }
+  return cleaned
+}
+
 async function callAI<T>(prompt: string, parseJson: boolean): Promise<T> {
   const { provider, apiKey } = useAIStore.getState()
 
@@ -112,7 +124,9 @@ async function callAI<T>(prompt: string, parseJson: boolean): Promise<T> {
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
       }
     )
-    const data = await res.json()
+    const raw = await res.text()
+    if (!res.ok) throw new Error(`Gemini API error ${res.status}: ${raw.slice(0, 200)}`)
+    const data = JSON.parse(raw)
     text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
   } else if (provider === 'openai' && apiKey) {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -120,7 +134,9 @@ async function callAI<T>(prompt: string, parseJson: boolean): Promise<T> {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }] }),
     })
-    const data = await res.json()
+    const raw = await res.text()
+    if (!res.ok) throw new Error(`OpenAI API error ${res.status}: ${raw.slice(0, 200)}`)
+    const data = JSON.parse(raw)
     text = data.choices?.[0]?.message?.content ?? ''
   } else {
     throw new Error('Selecciona un proveedor de IA o configura una API key')
@@ -128,10 +144,13 @@ async function callAI<T>(prompt: string, parseJson: boolean): Promise<T> {
 
   if (!parseJson) return text as unknown as T
 
-  const cleaned = text
-    .replace(/```(?:json)?\s*/gi, '')
-    .replace(/\s*```/g, '')
-    .trim()
+  const cleaned = extractJson(text)
 
-  return JSON.parse(cleaned) as T
+  try {
+    return JSON.parse(cleaned) as T
+  } catch {
+    throw new Error(
+      `La IA no generó JSON válido.\n\nRespuesta:\n${text.slice(0, 500)}`
+    )
+  }
 }
