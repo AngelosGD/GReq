@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useAuthStore } from '../store/authStore'
 import { getMockApis, saveMockApi, deleteMockApi } from '../lib/database'
 import { trackServer, untrackServer, getActiveServers } from '../lib/runningServers'
+import { generateMockApi } from '../lib/ai'
 
 const invokeWithTimeout = <T,>(cmd: string, args: Record<string, unknown>, ms = 4000): Promise<T> =>
   Promise.race([
@@ -138,6 +139,8 @@ export function MockApi({ onClose }: Props) {
   const [formPath, setFormPath] = useState('')
   const [formPort, setFormPort] = useState('')
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  const [aiDescription, setAiDescription] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
 
   const [deleteTarget, setDeleteTarget] = useState<MockApiItem | null>(null)
 
@@ -191,6 +194,7 @@ export function MockApi({ onClose }: Props) {
     setFormPath('')
     setFormPort(String(randomPort()))
     setFormErrors({})
+    setAiDescription('')
   }
 
   const filtered = mockApis
@@ -270,6 +274,30 @@ export function MockApi({ onClose }: Props) {
       if (api) startApi(api)
     }
     setRestoreList([])
+  }
+
+  const handleAiGenerate = async () => {
+    if (!aiDescription.trim()) return
+    setAiLoading(true)
+    try {
+      const result = await generateMockApi(aiDescription)
+      setFormName(result.name)
+      setFormPath(result.path.replace(/^\/+/, ''))
+      setFormMethods(result.methods)
+      resetFormFieldTypes(result.fields)
+      setFormTempFields(result.fields)
+      setFormErrors({})
+    } catch (e) {
+      alert(`Error al generar con IA: ${e}`)
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const resetFormFieldTypes = (fields: { name: string; type: string }[]) => {
+    if (fields.length > 0) {
+      setFormNewFieldType(fields[fields.length - 1].type)
+    }
   }
 
   const createApi = () => {
@@ -895,10 +923,50 @@ export function MockApi({ onClose }: Props) {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                     </svg>
                   </button>
-                </div>
-                {formErrors.fields && <p className="text-[10px] text-red-500 mt-1">{formErrors.fields}</p>}
               </div>
+              {formErrors.fields && <p className="text-[10px] text-red-500 mt-1">{formErrors.fields}</p>}
             </div>
+
+            <div className="border-t border-zinc-100 pt-4">
+              <button
+                type="button"
+                onClick={() => setAiDescription(aiDescription ? '' : ' ')}
+                className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-600 transition-colors"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                </svg>
+                Generar con IA
+              </button>
+
+              {aiDescription !== '' && (
+                <div className="mt-3 space-y-2">
+                  <textarea
+                    value={aiDescription === ' ' ? '' : aiDescription}
+                    onChange={(e) => setAiDescription(e.target.value)}
+                    placeholder="Describí qué API querés, ej: API de usuarios con nombre, email y edad"
+                    rows={3}
+                    className="w-full bg-zinc-50 border border-zinc-200/60 rounded-lg px-3 py-2 text-[11px] text-zinc-700 outline-none focus:border-zinc-300 transition-all placeholder-zinc-300 resize-none"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleAiGenerate}
+                      disabled={aiLoading}
+                      className="px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+                    >
+                      {aiLoading && (
+                        <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      )}
+                      {aiLoading ? 'Generando...' : 'Generar'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-zinc-100">
               <button onClick={() => setShowModal(false)} className="px-3.5 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 hover:bg-zinc-100 transition-colors">Cancelar</button>
               <button
