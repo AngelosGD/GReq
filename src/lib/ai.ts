@@ -126,8 +126,12 @@ async function callAI<T>(prompt: string, parseJson: boolean): Promise<T> {
     )
     const raw = await res.text()
     if (!res.ok) throw new Error(`Gemini API error ${res.status}: ${raw.slice(0, 200)}`)
-    const data = JSON.parse(raw)
-    text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    try {
+      const data = JSON.parse(raw)
+      text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    } catch {
+      throw new Error(`Gemini devolvió HTML inesperado. Revisá tu API key o cambiá a proveedor Local.\n\nRespuesta:\n${raw.slice(0, 300)}`)
+    }
   } else if (provider === 'openai' && apiKey) {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -136,8 +140,12 @@ async function callAI<T>(prompt: string, parseJson: boolean): Promise<T> {
     })
     const raw = await res.text()
     if (!res.ok) throw new Error(`OpenAI API error ${res.status}: ${raw.slice(0, 200)}`)
-    const data = JSON.parse(raw)
-    text = data.choices?.[0]?.message?.content ?? ''
+    try {
+      const data = JSON.parse(raw)
+      text = data.choices?.[0]?.message?.content ?? ''
+    } catch {
+      throw new Error(`OpenAI devolvió HTML inesperado. Revisá tu API key o cambiá a proveedor Local.\n\nRespuesta:\n${raw.slice(0, 300)}`)
+    }
   } else {
     throw new Error('Selecciona un proveedor de IA o configura una API key')
   }
