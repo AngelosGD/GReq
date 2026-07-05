@@ -12,14 +12,19 @@ async function loadLocalModel() {
   store.setModelProgress(0)
 
   modelLoadPromise = (async () => {
-    const { pipeline: p } = await import('@xenova/transformers')
-    pipeline = await p('text2text-generation', 'Xenova/LaMini-Flan-T5-783M', {
-      progress_callback: (progress: any) => {
-        if (progress?.status === 'progress' && typeof progress.progress === 'number') {
-          useAIStore.getState().setModelProgress(progress.progress)
-        }
-      },
-    })
+    try {
+      const { pipeline: p } = await import('@xenova/transformers')
+      pipeline = await p('text2text-generation', 'Xenova/LaMini-Flan-T5-783M', {
+        progress_callback: (progress: any) => {
+          if (progress?.status === 'progress' && typeof progress.progress === 'number') {
+            useAIStore.getState().setModelProgress(progress.progress)
+          }
+        },
+      })
+    } catch (e) {
+      useAIStore.getState().setModelLoading(false)
+      throw new Error(`Error descargando modelo IA: ${e}`)
+    }
     useAIStore.getState().setModelLoading(false)
     useAIStore.getState().setModelProgress(100)
     return pipeline
@@ -109,11 +114,20 @@ async function callAI<T>(prompt: string, parseJson: boolean): Promise<T> {
 
   if (provider === 'local') {
     const model = await loadLocalModel()
-    const result = await model(prompt, {
-      max_new_tokens: 512,
-      temperature: 0.3,
-      do_sample: false,
-    })
+    if (typeof model !== 'function') throw new Error('El modelo local no se cargó correctamente')
+    let result: any
+    try {
+      result = await model(prompt, {
+        max_new_tokens: 512,
+        temperature: 0.3,
+        do_sample: false,
+      })
+    } catch (e) {
+      throw new Error(`Error ejecutando modelo IA: ${e}`)
+    }
+    if (!Array.isArray(result) || !result[0]?.generated_text) {
+      throw new Error(`El modelo devolvió una respuesta inesperada:\n${JSON.stringify(result).slice(0, 300)}`)
+    }
     text = result[0].generated_text
   } else if (provider === 'gemini' && apiKey) {
     const res = await fetch(
