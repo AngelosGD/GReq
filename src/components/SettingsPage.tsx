@@ -4,7 +4,7 @@ import { useAIStore } from '../store/aiStore'
 
 export function SettingsPage() {
   const goBack = useAppStore((s) => s.goBack)
-  const { provider, apiKey, setProvider, setApiKey, modelLoading, modelProgress } = useAIStore()
+  const { provider, apiKey, setProvider, setApiKey } = useAIStore()
 
   return (
     <div className="h-[100dvh] flex flex-col bg-white transition-colors duration-300">
@@ -33,8 +33,8 @@ export function SettingsPage() {
           <section>
             <h2 className="text-sm font-semibold text-zinc-800 mb-3">Inteligencia Artificial</h2>
             <p className="text-xs text-zinc-400 mb-4">
-              El modelo local funciona sin conexión ni API key. Si querés respuestas de mayor calidad,
-              conectá una API key externa.
+              El modo Local funciona sin conexión ni API key. Si tenés una API key de Gemini o
+              OpenAI, podés conectarla para respuestas más precisas.
             </p>
 
             <label className="text-xs font-medium text-zinc-500 mb-1.5 block">Proveedor</label>
@@ -66,30 +66,11 @@ export function SettingsPage() {
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={
-                    provider === 'gemini'
-                      ? 'AIza...'
-                      : 'sk-...'
-                  }
+                  placeholder={provider === 'gemini' ? 'AIza...' : 'sk-...'}
                   className="w-full bg-zinc-50 border border-zinc-200/50 rounded-lg px-3 py-2 text-xs text-zinc-700 placeholder-zinc-300 outline-none focus:border-zinc-400 transition-all"
                 />
-              </div>
-            )}
-
-            {provider === 'local' && modelLoading && (
-              <div className="mt-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-zinc-400">Descargando modelo IA...</span>
-                  <span className="text-xs text-zinc-400">{Math.round(modelProgress)}%</span>
-                </div>
-                <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-zinc-900 rounded-full transition-all duration-300"
-                    style={{ width: `${modelProgress}%` }}
-                  />
-                </div>
                 <p className="text-[10px] text-zinc-300 mt-1">
-                  Solo la primera vez (~300 MB). Se cachea para usos futuros.
+                  La key solo se guarda localmente en tu navegador.
                 </p>
               </div>
             )}

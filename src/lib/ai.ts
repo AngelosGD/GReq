@@ -1,37 +1,223 @@
 import { useAIStore } from '../store/aiStore'
 
-let pipeline: any = null
-let modelLoadPromise: Promise<any> | null = null
+/* ─── Template local (100% offline, sin descargas ni API key) ─── */
 
-async function loadLocalModel() {
-  if (pipeline) return pipeline
-  if (modelLoadPromise) return modelLoadPromise
-
-  const store = useAIStore.getState()
-  store.setModelLoading(true)
-  store.setModelProgress(0)
-
-  modelLoadPromise = (async () => {
-    try {
-      const { pipeline: p } = await import('@xenova/transformers')
-      pipeline = await p('text2text-generation', 'Xenova/LaMini-Flan-T5-783M', {
-        progress_callback: (progress: any) => {
-          if (progress?.status === 'progress' && typeof progress.progress === 'number') {
-            useAIStore.getState().setModelProgress(progress.progress)
-          }
-        },
-      })
-    } catch (e) {
-      useAIStore.getState().setModelLoading(false)
-      throw new Error(`Error descargando modelo IA: ${e}`)
-    }
-    useAIStore.getState().setModelLoading(false)
-    useAIStore.getState().setModelProgress(100)
-    return pipeline
-  })()
-
-  return modelLoadPromise
+const COMMON_FIELDS: Record<string, { name: string; type: string }[]> = {
+  usuario: [
+    { name: 'id', type: 'int' },
+    { name: 'nombre', type: 'string' },
+    { name: 'email', type: 'string' },
+  ],
+  user: [
+    { name: 'id', type: 'int' },
+    { name: 'name', type: 'string' },
+    { name: 'email', type: 'string' },
+  ],
+  producto: [
+    { name: 'id', type: 'int' },
+    { name: 'nombre', type: 'string' },
+    { name: 'precio', type: 'int' },
+    { name: 'stock', type: 'int' },
+  ],
+  product: [
+    { name: 'id', type: 'int' },
+    { name: 'name', type: 'string' },
+    { name: 'price', type: 'int' },
+  ],
+  orden: [
+    { name: 'id', type: 'int' },
+    { name: 'total', type: 'int' },
+    { name: 'estado', type: 'string' },
+  ],
+  order: [
+    { name: 'id', type: 'int' },
+    { name: 'total', type: 'int' },
+    { name: 'status', type: 'string' },
+  ],
+  tarea: [
+    { name: 'id', type: 'int' },
+    { name: 'titulo', type: 'string' },
+    { name: 'completada', type: 'bool' },
+  ],
+  task: [
+    { name: 'id', type: 'int' },
+    { name: 'title', type: 'string' },
+    { name: 'completed', type: 'bool' },
+  ],
+  libro: [
+    { name: 'id', type: 'int' },
+    { name: 'titulo', type: 'string' },
+    { name: 'autor', type: 'string' },
+  ],
+  book: [
+    { name: 'id', type: 'int' },
+    { name: 'title', type: 'string' },
+    { name: 'author', type: 'string' },
+  ],
+  comentario: [
+    { name: 'id', type: 'int' },
+    { name: 'cuerpo', type: 'string' },
+    { name: 'fecha', type: 'string' },
+  ],
+  comment: [
+    { name: 'id', type: 'int' },
+    { name: 'body', type: 'string' },
+    { name: 'date', type: 'string' },
+  ],
 }
+
+const DEFAULT_FIELDS = [
+  { name: 'id', type: 'int' },
+  { name: 'nombre', type: 'string' },
+]
+
+function detectEntity(desc: string): string {
+  const lower = desc.toLowerCase()
+  const entities = Object.keys(COMMON_FIELDS)
+  for (const e of entities) {
+    if (lower.includes(e.toLowerCase())) return e
+  }
+  const words = lower.split(/\s+/).filter((w) => w.length > 3)
+  return words.length > 0 ? words[words.length - 1] : 'recurso'
+}
+
+function pickMethods(desc: string): string[] {
+  const lower = desc.toLowerCase()
+  const has = (w: string) => lower.includes(w)
+  const methods: string[] = []
+  if (has('get') || has('obtener') || has('listar')) methods.push('GET')
+  if (has('post') || has('crear') || has('nuev')) methods.push('POST')
+  if (has('put') || has('update') || has('actualizar') || has('modificar')) methods.push('UPDATE')
+  if (has('delete') || has('eliminar') || has('borrar')) methods.push('DELETE')
+  if (methods.length === 0) methods.push('GET', 'POST')
+  return methods
+}
+
+function generateName(desc: string, entity: string): string {
+  const words = desc.split(/\s+/).slice(0, 4).join(' ')
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+  return words.length > 10 ? `${cap(entity)} API` : cap(words)
+}
+
+function generateBody(fields: { name: string; type: string }[]): string {
+  const obj: Record<string, unknown> = {}
+  for (const f of fields) {
+    if (f.type === 'int') obj[f.name] = 1
+    else if (f.type === 'bool') obj[f.name] = true
+    else obj[f.name] = f.name === 'email' ? 'ejemplo@correo.com' : `${f.name}_ejemplo`
+  }
+  return JSON.stringify(obj, null, 2)
+}
+
+function templateMockApi(description: string) {
+  const entity = detectEntity(description)
+  const fields = COMMON_FIELDS[entity] ?? DEFAULT_FIELDS
+  return {
+    name: generateName(description, entity),
+    path: `/api/${entity}s`.toLowerCase(),
+    methods: pickMethods(description),
+    fields,
+    body: generateBody(fields),
+  }
+}
+
+function templateFlow(description: string) {
+  const lower = description.toLowerCase()
+  const baseUrl = lower.includes('jsonplaceholder')
+    ? 'https://jsonplaceholder.typicode.com'
+    : 'https://jsonplaceholder.typicode.com'
+  const entity = detectEntity(description)
+  const entityPlural = `${entity}s`.toLowerCase()
+
+  const urlNode = {
+    type: 'url' as const,
+    position: { x: 0, y: 0 },
+    data: {
+      url: `${baseUrl}/${entityPlural}`,
+      title: `Obtener ${entityPlural}`,
+      params: [],
+      headers: [],
+    },
+  }
+
+  const method = pickMethods(description)[0] === 'POST' ? 'POST' as const : 'GET' as const
+  const methodNode = {
+    type: 'method' as const,
+    position: { x: 350, y: 0 },
+    data: {
+      method: method as string,
+      headers: [],
+      body: method === 'POST' ? generateBody(COMMON_FIELDS[entity] ?? DEFAULT_FIELDS) : '',
+      bodyType: 'json',
+      auth: 'none' as const,
+      authValue: '',
+      repeatCount: 1,
+    },
+  }
+
+  return {
+    nodes: [
+      { id: 'node-0', ...urlNode },
+      { id: 'node-1', ...methodNode },
+    ],
+    edges: [
+      { id: 'edge-0-1', source: 'node-0', target: 'node-1', animated: true },
+    ],
+  }
+}
+
+/* ─── API externa (Gemini / OpenAI) ─── */
+
+async function callExternalAPI(prompt: string): Promise<string> {
+  const { provider, apiKey } = useAIStore.getState()
+
+  if (provider === 'gemini' && apiKey) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      },
+    )
+    const raw = await res.text()
+    if (!res.ok) throw new Error(`Gemini error ${res.status}: ${raw.slice(0, 200)}`)
+    try {
+      const data = JSON.parse(raw)
+      return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    } catch {
+      throw new Error(`Gemini devolvió HTML. Revisá tu API key o probá con Local: ${raw.slice(0, 200)}`)
+    }
+  }
+
+  if (provider === 'openai' && apiKey) {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }] }),
+    })
+    const raw = await res.text()
+    if (!res.ok) throw new Error(`OpenAI error ${res.status}: ${raw.slice(0, 200)}`)
+    try {
+      const data = JSON.parse(raw)
+      return data.choices?.[0]?.message?.content ?? ''
+    } catch {
+      throw new Error(`OpenAI devolvió HTML. Revisá tu API key o probá con Local: ${raw.slice(0, 200)}`)
+    }
+  }
+
+  return ''
+}
+
+function extractJson(text: string): string {
+  let cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/\s*```/g, '').trim()
+  const start = cleaned.indexOf('{')
+  const end = cleaned.lastIndexOf('}')
+  if (start !== -1 && end !== -1 && end > start) cleaned = cleaned.slice(start, end + 1)
+  return cleaned
+}
+
+/* ─── API pública ─── */
 
 export async function generateMockApi(description: string): Promise<{
   name: string
@@ -40,139 +226,48 @@ export async function generateMockApi(description: string): Promise<{
   fields: { name: string; type: string }[]
   body: string
 }> {
-  const prompt = `Genera una configuración de API mock en JSON válido.
-Descripción: ${description}
+  const { provider, apiKey } = useAIStore.getState()
 
-Formato exacto (solo JSON, sin markdown):
-{
-  "name": "...",
-  "path": "/...",
-  "methods": ["GET"],
-  "fields": [{"name": "...", "type": "string"}],
-  "body": "{...}"
-}
+  if ((provider === 'gemini' || provider === 'openai') && apiKey) {
+    const prompt =
+      `Genera una configuración de API mock en JSON válido.\nDescripción: ${description}\n\n` +
+      `Formato exacto (solo JSON):\n{\n  "name": "...",\n  "path": "/...",\n  "methods": ["GET"],\n  "fields": [{"name": "...", "type": "string"}],\n  "body": "{...}"\n}\n\n` +
+      `Tipos: string, int, bool. Reglas: name corto, path empieza con /, methods GET/POST/DELETE/UPDATE, fields mínimo 1, body JSON ejemplo.\n\nGenera el JSON:`
 
-Tipos válidos para fields: "string", "int", "bool"
-Reglas:
-- name: nombre corto en español
-- path: empieza con /
-- methods: uno o más de GET, POST, DELETE, UPDATE
-- fields: campos que tendrá la respuesta, mínimo 1
-- body: JSON de ejemplo con los fields
+    const raw = await callExternalAPI(prompt)
+    if (raw) {
+      try {
+        return JSON.parse(extractJson(raw))
+      } catch {
+        throw new Error(`La IA externa no generó JSON válido:\n${raw.slice(0, 300)}`)
+      }
+    }
+  }
 
-Genera el JSON:`
-
-  return callAI(prompt, true)
+  return templateMockApi(description)
 }
 
 export async function generateFlow(description: string): Promise<{
   nodes: any[]
   edges: any[]
 }> {
-  const prompt = `Genera un diagrama de flujo de API en JSON válido.
-Descripción: ${description}
-
-Formato exacto (solo JSON, sin markdown):
-{
-  "nodes": [
-    { "type": "url", "position": { "x": 0, "y": 0 }, "data": { "url": "https://...", "title": "...", "params": [], "headers": [] } },
-    { "type": "method", "position": { "x": 300, "y": 0 }, "data": { "method": "GET", "headers": [], "body": "", "bodyType": "json", "auth": "none", "authValue": "", "repeatCount": 1 } }
-  ],
-  "edges": [
-    { "source": "node-0", "target": "node-1", "animated": true }
-  ]
-}
-
-Reglas:
-- type: "url" o "method"
-- url: usa https://jsonplaceholder.typicode.com si no se especifica dominio
-- position.x: nodes en fila, separados ~300px
-- Edges conectan url → method
-- Genera mínimo 2 nodos (1 url + 1 method)
-
-Genera el JSON:`
-
-  return callAI(prompt, true)
-}
-
-function extractJson(text: string): string {
-  // remove markdown fences
-  let cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/\s*```/g, '').trim()
-  // find first { and last }
-  const start = cleaned.indexOf('{')
-  const end = cleaned.lastIndexOf('}')
-  if (start !== -1 && end !== -1 && end > start) {
-    cleaned = cleaned.slice(start, end + 1)
-  }
-  return cleaned
-}
-
-async function callAI<T>(prompt: string, parseJson: boolean): Promise<T> {
   const { provider, apiKey } = useAIStore.getState()
 
-  let text: string
+  if ((provider === 'gemini' || provider === 'openai') && apiKey) {
+    const prompt =
+      `Genera un diagrama de flujo de API en JSON.\nDescripción: ${description}\n\n` +
+      `Formato:\n{\n  "nodes": [\n    { "type": "url", "position": {"x":0,"y":0}, "data": {"url":"...", "title":"...", "params":[], "headers":[]} },\n    { "type": "method", "position": {"x":300,"y":0}, "data": {"method":"GET", "headers":[], "body":"", "bodyType":"json", "auth":"none", "authValue":"", "repeatCount":1} }\n  ],\n  "edges": [ { "source": "node-0", "target": "node-1", "animated": true } ]\n}\n\n` +
+      `Reglas: type "url" o "method", position.x separados ~300px, edges conectan url→method, mínimo 2 nodos.\n\nGenera el JSON:`
 
-  if (provider === 'local') {
-    const model = await loadLocalModel()
-    if (typeof model !== 'function') throw new Error('El modelo local no se cargó correctamente')
-    let result: any
-    try {
-      result = await model(prompt, {
-        max_new_tokens: 512,
-        temperature: 0.3,
-        do_sample: false,
-      })
-    } catch (e) {
-      throw new Error(`Error ejecutando modelo IA: ${e}`)
-    }
-    if (!Array.isArray(result) || !result[0]?.generated_text) {
-      throw new Error(`El modelo devolvió una respuesta inesperada:\n${JSON.stringify(result).slice(0, 300)}`)
-    }
-    text = result[0].generated_text
-  } else if (provider === 'gemini' && apiKey) {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+    const raw = await callExternalAPI(prompt)
+    if (raw) {
+      try {
+        return JSON.parse(extractJson(raw))
+      } catch {
+        throw new Error(`La IA externa no generó JSON válido:\n${raw.slice(0, 300)}`)
       }
-    )
-    const raw = await res.text()
-    if (!res.ok) throw new Error(`Gemini API error ${res.status}: ${raw.slice(0, 200)}`)
-    try {
-      const data = JSON.parse(raw)
-      text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-    } catch {
-      throw new Error(`Gemini devolvió HTML inesperado. Revisá tu API key o cambiá a proveedor Local.\n\nRespuesta:\n${raw.slice(0, 300)}`)
     }
-  } else if (provider === 'openai' && apiKey) {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }] }),
-    })
-    const raw = await res.text()
-    if (!res.ok) throw new Error(`OpenAI API error ${res.status}: ${raw.slice(0, 200)}`)
-    try {
-      const data = JSON.parse(raw)
-      text = data.choices?.[0]?.message?.content ?? ''
-    } catch {
-      throw new Error(`OpenAI devolvió HTML inesperado. Revisá tu API key o cambiá a proveedor Local.\n\nRespuesta:\n${raw.slice(0, 300)}`)
-    }
-  } else {
-    throw new Error('Selecciona un proveedor de IA o configura una API key')
   }
 
-  if (!parseJson) return text as unknown as T
-
-  const cleaned = extractJson(text)
-
-  try {
-    return JSON.parse(cleaned) as T
-  } catch {
-    throw new Error(
-      `La IA no generó JSON válido.\n\nRespuesta:\n${text.slice(0, 500)}`
-    )
-  }
+  return templateFlow(description)
 }
