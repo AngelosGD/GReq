@@ -17,10 +17,22 @@ const methodColors: Record<string, { dot: string; badge: string; text: string }>
   UPDATE: { dot: '#f59e0b', badge: '#fef3c7', text: '#d97706' },
 }
 
+interface FieldDef {
+  name: string
+  type: string
+}
+
+const FIELD_TYPES = ['string', 'int', 'bool'] as const
+
+const typeDisplay = (type: string) =>
+  type === 'int' ? 0 : type === 'bool' ? false : '"string"'
+
 interface MockApiItem {
   id: string
   name: string
-  method: string
+  methods: string[]
+  fields: FieldDef[]
+  pinned: boolean
   path: string
   port: number
   running: boolean
@@ -39,6 +51,19 @@ interface Tab {
 const randomPort = () => Math.floor(Math.random() * 10000) + 30000
 const defaultBody = JSON.stringify({ id: 1, name: 'John Doe' }, null, 2)
 
+function genId(): string {
+  try {
+    const buf = new Uint8Array(16)
+    crypto.getRandomValues(buf)
+    buf[6] = (buf[6] & 0x0f) | 0x40
+    buf[8] = (buf[8] & 0x3f) | 0x80
+    const h = (i: number) => buf[i].toString(16).padStart(2, '0')
+    return `${h(0)}${h(1)}${h(2)}${h(3)}-${h(4)}${h(5)}-${h(6)}${h(7)}-${h(8)}${h(9)}-${h(10)}${h(11)}${h(12)}${h(13)}${h(14)}${h(15)}`
+  } catch {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  }
+}
+
 export function MockApi({ onClose }: Props) {
   const user = useAuthStore((s) => s.user)
   const [filter, setFilter] = useState<FilterMethod>('Todas')
@@ -46,7 +71,23 @@ export function MockApi({ onClose }: Props) {
   const [mockApis, setMockApis] = useState<MockApiItem[]>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
-      return raw ? JSON.parse(raw) : []
+      if (!raw) return []
+      const parsed: any[] = JSON.parse(raw)
+      return parsed.map((a) => ({
+        id: a.id ?? '',
+        name: a.name ?? 'Sin nombre',
+        methods: Array.isArray(a.methods) ? a.methods : (a.method ? [a.method] : ['GET']),
+        fields: Array.isArray(a.fields)
+          ? a.fields.map((f: any) => typeof f === 'string' ? { name: f, type: 'string' } : { name: f.name ?? '', type: f.type ?? 'string' })
+          : [],
+        pinned: typeof a.pinned === 'boolean' ? a.pinned : false,
+        path: a.path ?? '',
+        port: a.port ?? 0,
+        running: a.running ?? false,
+        serverId: a.serverId ?? null,
+        statusCode: a.statusCode ?? 200,
+        responseBody: a.responseBody ?? '',
+      }))
     } catch {
       return []
     }
@@ -58,7 +99,11 @@ export function MockApi({ onClose }: Props) {
         const items: MockApiItem[] = (apis as any[]).map((a) => ({
           id: a.id,
           name: a.name ?? '',
-          method: a.method ?? 'GET',
+        methods: Array.isArray(a.methods) ? a.methods : (a.method ? [a.method] : ['GET']),
+        fields: Array.isArray(a.fields)
+          ? a.fields.map((f: any) => typeof f === 'string' ? { name: f, type: 'string' } : { name: f.name ?? '', type: f.type ?? 'string' })
+          : [],
+        pinned: typeof a.pinned === 'boolean' ? a.pinned : false,
           path: a.path ?? '',
           port: a.port ?? 0,
           running: a.isRunning ?? false,
@@ -75,8 +120,13 @@ export function MockApi({ onClose }: Props) {
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
 
+  const [activeMethod, setActiveMethod] = useState('GET')
+
   const [formName, setFormName] = useState('')
-  const [formMethod, setFormMethod] = useState('GET')
+  const [formMethods, setFormMethods] = useState<string[]>(['GET'])
+  const [formTempFields, setFormTempFields] = useState<FieldDef[]>([])
+  const [formNewFieldName, setFormNewFieldName] = useState('')
+  const [formNewFieldType, setFormNewFieldType] = useState<string>('string')
   const [formPath, setFormPath] = useState('')
   const [formPort, setFormPort] = useState('')
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
@@ -90,8 +140,11 @@ export function MockApi({ onClose }: Props) {
         saveMockApi(user.$id, {
           id: api.id,
           name: api.name,
+          methods: api.methods,
+          fields: api.fields,
+          pinned: api.pinned,
           path: api.path,
-          method: api.method,
+          method: api.methods[0] ?? 'GET',
           statusCode: api.statusCode,
           responseBody: api.responseBody,
           port: api.port,
@@ -102,23 +155,37 @@ export function MockApi({ onClose }: Props) {
     }
   }, [mockApis, user])
 
+  const handleAddField = () => {
+    if (!formNewFieldName.trim()) return
+    setFormTempFields((prev) => [...prev, { name: formNewFieldName.trim(), type: formNewFieldType }])
+    setFormNewFieldName('')
+    setFormErrors((e) => ({ ...e, fields: '' }))
+  }
+
+  const handleRemoveField = (idx: number) => {
+    setFormTempFields((prev) => prev.filter((_, i) => i !== idx))
+  }
+
   const resetForm = () => {
     setFormName('')
-    setFormMethod('GET')
+    setFormMethods(['GET'])
+    setFormTempFields([])
+    setFormNewFieldName('')
+    setFormNewFieldType('string')
     setFormPath('')
     setFormPort(String(randomPort()))
     setFormErrors({})
   }
 
   const filtered = mockApis
-    .filter((a) => filter === 'Todas' || a.method === filter)
-    .filter((a) => a.name.toLowerCase().includes(search.toLowerCase()))
+    .filter((a) => filter === 'Todas' || a.methods.includes(filter))
+    .filter((a) => (a.name ?? '').toLowerCase().includes(search.toLowerCase()))
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null
   const activeApi = activeTab?.apiId ? mockApis.find((a) => a.id === activeTab.apiId) ?? null : null
 
   const addTab = (apiId: string | null) => {
-    const id = crypto.randomUUID()
+    const id = genId()
     setTabs((t) => [...t, { id, apiId }])
     setActiveTabId(id)
   }
@@ -146,7 +213,7 @@ export function MockApi({ onClose }: Props) {
       const info = await invoke<{ url: string; id: string }>('start_mock_server', {
         config: {
           path: api.path,
-          method: api.method,
+          method: api.methods[0] ?? 'GET',
           status: api.statusCode,
           headers: [],
           body: api.responseBody || defaultBody,
@@ -181,6 +248,8 @@ export function MockApi({ onClose }: Props) {
   const createApi = () => {
     const errors: Record<string, string> = {}
     if (!formName.trim()) errors.name = 'El nombre es obligatorio'
+    if (formMethods.length === 0) errors.methods = 'Selecciona al menos un método'
+    if (formTempFields.length === 0) errors.fields = 'Agrega al menos un campo'
     if (!formPath.trim()) errors.path = 'La ruta es obligatoria'
     if (!formPort.trim()) errors.port = 'El puerto es obligatorio'
     else if (isNaN(Number(formPort)) || Number(formPort) < 1 || Number(formPort) > 65535)
@@ -195,17 +264,28 @@ export function MockApi({ onClose }: Props) {
       return
     }
 
-    const id = crypto.randomUUID()
+    const id = genId()
     const api: MockApiItem = {
       id,
       name: formName.trim(),
-      method: formMethod,
+      methods: formMethods,
+      fields: formTempFields,
+      pinned: false,
       path: formPath.trim(),
       port: Number(formPort),
       running: false,
       serverId: null,
       statusCode: 200,
-      responseBody: defaultBody,
+      responseBody: formTempFields.length > 0
+        ? JSON.stringify(
+            Object.fromEntries(formTempFields.map((f) => [
+              f.name,
+              f.type === 'int' ? 0 : f.type === 'bool' ? false : 'string',
+            ])),
+            null,
+            2
+          )
+        : defaultBody,
     }
     setMockApis((a) => [...a, api])
     setShowModal(false)
@@ -242,6 +322,16 @@ export function MockApi({ onClose }: Props) {
   const setResponseBody = (apiId: string, body: string) => {
     setMockApis((a) => a.map((x) => (x.id === apiId ? { ...x, responseBody: body } : x)))
   }
+
+  const togglePin = (apiId: string) => {
+    setMockApis((a) => a.map((x) => (x.id === apiId ? { ...x, pinned: !x.pinned } : x)))
+  }
+
+  useEffect(() => {
+    if (activeApi) {
+      setActiveMethod(activeApi.methods[0] ?? 'GET')
+    }
+  }, [activeApi])
 
   return (
     <div className="h-full flex bg-white">
@@ -311,38 +401,64 @@ export function MockApi({ onClose }: Props) {
               <p className="text-[11px] text-zinc-400">Sin resultados</p>
             </div>
           ) : (
-            filtered.map((api) => {
-              const c = methodColors[api.method]
-              const isSelected = activeTab?.apiId === api.id
-              return (
-                <button
-                  key={api.id}
-                  onClick={() => selectApi(api.id)}
-                  className={`w-full text-left px-3 py-2 rounded-lg transition-all ${
-                    isSelected ? 'bg-zinc-100' : 'hover:bg-zinc-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-medium text-zinc-800 truncate">{api.name}</span>
-                        <span
-                          className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded"
-                          style={{ backgroundColor: c.badge, color: c.text }}
-                        >
-                          {api.method}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
+            [...filtered]
+              .sort((a, b) => (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1))
+              .map((api) => {
+                const isSelected = activeTab?.apiId === api.id
+                return (
+                  <div
+                    key={api.id}
+                    className={`w-full px-1.5 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
+                      isSelected ? 'bg-zinc-100' : 'hover:bg-zinc-50'
+                    }`}
+                  >
+                    <button
+                      onClick={() => togglePin(api.id)}
+                      className="shrink-0 w-4 h-4 flex items-center justify-center"
+                    >
+                      <svg className={`w-3 h-3 ${api.pinned ? 'text-amber-400 fill-amber-400' : 'text-zinc-200 hover:text-zinc-400'}`} viewBox="0 0 24 24" fill={api.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => selectApi(api.id)}
+                      className="flex-1 flex items-center gap-2 min-w-0"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs font-medium text-zinc-800 truncate">{api.name}</span>
+                          <div className="flex gap-0.5 flex-wrap shrink-0">
+                            {api.methods.map((m) => {
+                              const c = methodColors[m]
+                              return (
+                                <span key={m} className={`w-1.5 h-1.5 rounded-full`} style={{ backgroundColor: c?.dot ?? '#a1a1aa' }} />
+                              )
+                            })}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <div className="flex gap-0.5 flex-wrap">
+                            {api.methods.map((m) => {
+                              const c = methodColors[m]
+                              return (
+                                <span
+                                  key={m}
+                                  className="text-[8px] font-semibold uppercase px-1 py-px rounded"
+                                  style={{ backgroundColor: c?.badge ?? '#f4f4f5', color: c?.text ?? '#a1a1aa' }}
+                                >
+                                  {m}
+                                </span>
+                              )
+                            })}
+                          </div>
+                        </div>
                         <code className="text-[10px] font-mono text-zinc-400 truncate">/{api.path}</code>
                       </div>
-                    </div>
-                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${api.running ? 'bg-emerald-400' : 'bg-zinc-200'}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${api.running ? 'bg-emerald-400' : 'bg-zinc-200'}`} />
+                    </button>
                   </div>
-                </button>
-              )
-            })
+                )
+              })
           )}
         </div>
 
@@ -368,7 +484,7 @@ export function MockApi({ onClose }: Props) {
             <div className="flex items-center h-full px-1.5 gap-px">
               {tabs.map((tab) => {
                 const api = tab.apiId ? mockApis.find((a) => a.id === tab.apiId) : null
-                const c = api ? methodColors[api.method] : null
+                const c = api ? methodColors[api.methods[0] ?? 'GET'] : null
                 const isActive = activeTabId === tab.id
                 return (
                   <button
@@ -410,38 +526,57 @@ export function MockApi({ onClose }: Props) {
         )}
 
         {activeApi ? (
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 flex flex-col overflow-y-auto">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-zinc-100">
+            <div className="px-6 pt-4 pb-3 border-b border-zinc-100">
               <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2.5 mb-1">
-                    <h3 className="text-base font-semibold text-zinc-900">{activeApi.name}</h3>
-                    <span
-                      className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded"
-                      style={{ backgroundColor: methodColors[activeApi.method].badge, color: methodColors[activeApi.method].text }}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-base font-semibold text-zinc-900 truncate">{activeApi.name}</h3>
+                    <button
+                      onClick={() => togglePin(activeApi.id)}
+                      className="shrink-0 w-5 h-5 flex items-center justify-center"
                     >
-                      {activeApi.method}
-                    </span>
+                      <svg className={`w-3.5 h-3.5 ${activeApi.pinned ? 'text-amber-400 fill-amber-400' : 'text-zinc-200 hover:text-zinc-400'}`} viewBox="0 0 24 24" fill={activeApi.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                      </svg>
+                    </button>
                     <span className={`text-[10px] font-medium ${activeApi.running ? 'text-emerald-600' : 'text-zinc-400'}`}>
                       {activeApi.running ? 'Activo' : 'Detenido'}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <code className="text-[11px] font-mono text-zinc-400">
+                    <code className="text-[11px] font-mono text-zinc-400 truncate">
                       http://localhost:{activeApi.port}/{activeApi.path}
                     </code>
                     <button
                       onClick={() => navigator.clipboard.writeText(`http://localhost:${activeApi.port}/${activeApi.path}`)}
-                      className="p-0.5 rounded text-zinc-300 hover:text-zinc-500 transition-colors"
+                      className="p-0.5 rounded text-zinc-300 hover:text-zinc-500 transition-colors shrink-0"
                     >
                       <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
                       </svg>
                     </button>
                   </div>
+                  {/* Method tabs */}
+                  {activeApi.methods.length > 1 && (
+                    <div className="flex gap-1 mt-3">
+                      {activeApi.methods.map((m) => (
+                        <button
+                          key={m}
+                          onClick={() => setActiveMethod(m)}
+                          className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all ${
+                            activeMethod === m ? 'text-white' : 'text-zinc-400 hover:text-zinc-600 bg-zinc-50 hover:bg-zinc-100'
+                          }`}
+                          style={activeMethod === m ? { backgroundColor: methodColors[m]?.dot ?? '#18181b' } : undefined}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 shrink-0">
                   {activeApi.running ? (
                     <button
                       onClick={() => stopApi(activeApi)}
@@ -493,35 +628,53 @@ export function MockApi({ onClose }: Props) {
 
               <section>
                 <h4 className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] mb-2.5">
-                  {activeApi.method === 'GET' && 'Query params'}
-                  {activeApi.method === 'POST' && 'Body'}
-                  {activeApi.method === 'DELETE' && 'Route params'}
-                  {activeApi.method === 'UPDATE' && 'Fields'}
+                  {activeMethod === 'GET' && 'Response schema'}
+                  {activeMethod === 'POST' && 'Request body'}
+                  {activeMethod === 'DELETE' && 'Route params'}
+                  {activeMethod === 'UPDATE' && 'Updatable fields'}
                 </h4>
                 <div className="bg-zinc-50 rounded-xl p-3">
-                  {activeApi.method === 'GET' && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {['page', 'limit', 'sort'].map((p) => (
-                        <span key={p} className="bg-white border border-zinc-200/60 rounded-md px-2.5 py-1 text-[10px] font-mono text-zinc-600">:{p}</span>
-                      ))}
+                  {activeMethod === 'GET' && (
+                    <div className="flex flex-wrap gap-2">
+                      {activeApi.fields.length > 0 ? activeApi.fields.map((f) => (
+                        <div key={f.name} className="flex items-center gap-1.5 bg-white border border-zinc-200/60 rounded-md px-2.5 py-1">
+                          <code className="text-[10px] font-mono text-zinc-600">:{f.name}</code>
+                          <span className="text-[8px] font-mono text-zinc-400 bg-zinc-100 px-1 rounded">{f.type}</span>
+                        </div>
+                      )) : (
+                        <span className="text-[10px] text-zinc-400 italic">Sin campos definidos</span>
+                      )}
                     </div>
                   )}
-                  {activeApi.method === 'POST' && (
+                  {activeMethod === 'POST' && (
                     <div className="bg-white border border-zinc-200/60 rounded-lg p-2.5 font-mono text-[10px] text-zinc-500 leading-relaxed">
-                      {'{\n  "name": "string",\n  "email": "string"\n}'}
+                      {activeApi.fields.length > 0
+                        ? `{\n${activeApi.fields.map((f) => `  "${f.name}": ${typeDisplay(f.type)}`).join(',\n')}\n}`
+                        : '{\n  // Sin campos definidos\n}'}
                     </div>
                   )}
-                  {activeApi.method === 'DELETE' && (
-                    <div className="flex items-center gap-2 bg-white border border-zinc-200/60 rounded-md px-3 py-1.5">
-                      <code className="text-[11px] font-mono text-zinc-700">:id</code>
-                      <span className="text-[10px] text-zinc-400">string</span>
+                  {activeMethod === 'DELETE' && (
+                    <div className="flex flex-wrap gap-2">
+                      {activeApi.fields.length > 0 ? activeApi.fields.map((f) => (
+                        <div key={f.name} className="flex items-center gap-1.5 bg-white border border-zinc-200/60 rounded-md px-3 py-1.5">
+                          <code className="text-[11px] font-mono text-zinc-700">:{f.name}</code>
+                          <span className="text-[8px] font-mono text-zinc-400 bg-zinc-100 px-1 rounded">{f.type}</span>
+                        </div>
+                      )) : (
+                        <span className="text-[10px] text-zinc-400 italic">Sin campos definidos</span>
+                      )}
                     </div>
                   )}
-                  {activeApi.method === 'UPDATE' && (
+                  {activeMethod === 'UPDATE' && (
                     <div className="flex flex-wrap gap-1.5">
-                      {['name', 'email', 'role'].map((f) => (
-                        <span key={f} className="bg-white border border-zinc-200/60 rounded-md px-2.5 py-1 text-[10px] font-mono text-zinc-600">{f}</span>
-                      ))}
+                      {activeApi.fields.length > 0 ? activeApi.fields.map((f) => (
+                        <div key={f.name} className="flex items-center gap-1.5 bg-white border border-zinc-200/60 rounded-md px-2.5 py-1">
+                          <span className="text-[10px] font-mono text-zinc-600">{f.name}</span>
+                          <span className="text-[8px] font-mono text-zinc-400 bg-zinc-100 px-1 rounded">{f.type}</span>
+                        </div>
+                      )) : (
+                        <span className="text-[10px] text-zinc-400 italic">Sin campos definidos</span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -599,6 +752,32 @@ export function MockApi({ onClose }: Props) {
                 />
                 {formErrors.name && <p className="text-[10px] text-red-500 mt-1">{formErrors.name}</p>}
               </div>
+              <div>
+                <label className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] block mb-1.5">Métodos</label>
+                <div className="flex gap-1">
+                  {methods.map((m) => {
+                    const selected = formMethods.includes(m)
+                    return (
+                      <button
+                        key={m}
+                        onClick={() => {
+                          setFormMethods((prev) =>
+                            prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
+                          )
+                          setFormErrors((e) => ({ ...e, methods: '' }))
+                        }}
+                        className={`flex-1 px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
+                          selected ? 'text-white' : 'bg-zinc-50 text-zinc-400 hover:bg-zinc-100'
+                        }`}
+                        style={selected ? { backgroundColor: methodColors[m].dot } : undefined}
+                      >
+                        {m}
+                      </button>
+                    )
+                  })}
+                </div>
+                {formErrors.methods && <p className="text-[10px] text-red-500 mt-1">{formErrors.methods}</p>}
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] block mb-1.5">Puerto</label>
@@ -611,35 +790,64 @@ export function MockApi({ onClose }: Props) {
                   {formErrors.port && <p className="text-[10px] text-red-500 mt-1">{formErrors.port}</p>}
                 </div>
                 <div>
-                  <label className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] block mb-1.5">Método</label>
-                  <div className="flex gap-1">
-                    {methods.map((m) => (
-                      <button
-                        key={m}
-                        onClick={() => setFormMethod(m)}
-                        className={`flex-1 px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
-                          formMethod === m ? 'text-white' : 'bg-zinc-50 text-zinc-400 hover:bg-zinc-100'
-                        }`}
-                        style={formMethod === m ? { backgroundColor: methodColors[m].dot } : undefined}
-                      >
-                        {m}
-                      </button>
-                    ))}
+                  <label className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] block mb-1.5">Ruta</label>
+                  <div className="flex items-center gap-1 bg-zinc-50 border border-zinc-200/60 rounded-lg px-3 py-1.5">
+                    <span className="text-xs text-zinc-300 font-mono">/</span>
+                    <input
+                      value={formPath}
+                      onChange={(e) => { setFormPath(e.target.value); setFormErrors((e) => ({ ...e, path: '' })) }}
+                      placeholder="api/users"
+                      className="flex-1 text-xs font-mono text-zinc-700 outline-none bg-transparent placeholder-zinc-300"
+                    />
                   </div>
+                  {formErrors.path && <p className="text-[10px] text-red-500 mt-1">{formErrors.path}</p>}
                 </div>
               </div>
               <div>
-                <label className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] block mb-1.5">Ruta</label>
-                <div className="flex items-center gap-1 bg-zinc-50 border border-zinc-200/60 rounded-lg px-3 py-1.5">
-                  <span className="text-xs text-zinc-300 font-mono">/</span>
-                  <input
-                    value={formPath}
-                    onChange={(e) => { setFormPath(e.target.value); setFormErrors((e) => ({ ...e, path: '' })) }}
-                    placeholder="api/users"
-                    className="flex-1 text-xs font-mono text-zinc-700 outline-none bg-transparent placeholder-zinc-300"
-                  />
+                <label className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] block mb-1.5">Campos</label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {formTempFields.map((f, i) => (
+                    <div key={i} className="flex items-center gap-1 bg-zinc-100 rounded-md px-2 py-1">
+                      <span className="text-[10px] font-mono text-zinc-700">{f.name}</span>
+                      <span className="text-[8px] font-mono text-zinc-400">{f.type}</span>
+                      <button
+                        onClick={() => handleRemoveField(i)}
+                        className="ml-0.5 w-3.5 h-3.5 flex items-center justify-center rounded text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
                 </div>
-                {formErrors.path && <p className="text-[10px] text-red-500 mt-1">{formErrors.path}</p>}
+                <div className="flex items-center gap-2">
+                  <input
+                    value={formNewFieldName}
+                    onChange={(e) => setFormNewFieldName(e.target.value)}
+                    placeholder="nombre"
+                    className="flex-1 bg-zinc-50 border border-zinc-200/60 rounded-lg px-2.5 py-1.5 text-xs font-mono text-zinc-700 outline-none focus:border-zinc-300 transition-all placeholder-zinc-300"
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddField() } }}
+                  />
+                  <select
+                    value={formNewFieldType}
+                    onChange={(e) => setFormNewFieldType(e.target.value)}
+                    className="bg-zinc-50 border border-zinc-200/60 rounded-lg px-2 py-1.5 text-[10px] font-mono text-zinc-600 outline-none focus:border-zinc-300 transition-all"
+                  >
+                    {FIELD_TYPES.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleAddField}
+                    className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 active:scale-[0.98] transition-all"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                  </button>
+                </div>
+                {formErrors.fields && <p className="text-[10px] text-red-500 mt-1">{formErrors.fields}</p>}
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-zinc-100">

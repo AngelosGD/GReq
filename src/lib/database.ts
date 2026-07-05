@@ -74,6 +74,9 @@ export async function deleteHistoryEntry(userId: string, entryId: string) {
 export interface MockApiData {
   id: string
   name: string
+  methods: string[]
+  fields: { name: string; type: string }[]
+  pinned: boolean
   path: string
   method: string
   statusCode: number
