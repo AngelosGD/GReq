@@ -2,8 +2,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
 import { getActiveServers, clearTrackedServers } from './runningServers'
 
-export function registerCloseHandler() {
-  getCurrentWindow().onCloseRequested(async (event) => {
+export async function registerCloseHandler() {
+  const unlisten = await getCurrentWindow().onCloseRequested(async (event) => {
     const servers = getActiveServers()
     if (servers.length === 0) return
 
@@ -48,6 +48,7 @@ export function registerCloseHandler() {
 
     box.querySelector('#ch-stop')!.addEventListener('click', async () => {
       close()
+      unlisten()
       await invoke('stop_all_mock_servers')
       clearTrackedServers()
       await getCurrentWindow().close()
@@ -55,6 +56,7 @@ export function registerCloseHandler() {
 
     box.querySelector('#ch-keep')!.addEventListener('click', async () => {
       close()
+      unlisten()
       await getCurrentWindow().close()
     })
 

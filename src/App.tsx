@@ -21,7 +21,7 @@ export function App() {
       }
       setCheckingSession(false)
     })
-    registerCloseHandler()
+    registerCloseHandler().catch(() => {})
   }, [])
 
   if (checkingSession) {
