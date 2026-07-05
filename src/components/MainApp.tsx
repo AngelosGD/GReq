@@ -31,6 +31,7 @@ import { useAuthStore } from '../store/authStore'
 import { saveHistoryEntry } from '../lib/database'
 import { HistoryModal } from './HistoryModal'
 import { GroupDeleteModal } from './GroupDeleteModal'
+import { AiChat } from './AiChat'
 
 type SidebarMode = 'options' | 'nodes'
 
@@ -53,6 +54,7 @@ export function MainApp() {
   const [showMockApi, setShowMockApi] = useState(false)
   const [groupDeleteInfo, setGroupDeleteInfo] = useState<{ node: Node; methods: Node[] } | null>(null)
   const [showProfile, setShowProfile] = useState(false)
+  const [showAiChat, setShowAiChat] = useState(false)
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
   const gearRef = useRef<HTMLDivElement>(null)
@@ -576,6 +578,33 @@ export function MainApp() {
             className="flex-1 relative"
             onClick={() => setCtxMenu(null)}
           >
+            {showAiChat && (
+              <div className="absolute right-0 top-0 bottom-0 z-20">
+                <AiChat
+                  onApplyFlow={(newNodes, newEdges) => {
+                    const updatedNodes = [...nodes, ...newNodes.map((n) => ({ ...n, selected: false } as Node))]
+                    const updatedEdges = [...edges, ...newEdges]
+                    setNodes(updatedNodes)
+                    setEdges(updatedEdges)
+                    takeSnapshot(updatedNodes, updatedEdges)
+                  }}
+                  onClose={() => setShowAiChat(false)}
+                />
+              </div>
+            )}
+
+            {!showAiChat && (
+              <button
+                onClick={() => setShowAiChat(true)}
+                className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 shadow-md transition-all"
+                title="Asistente IA"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                </svg>
+              </button>
+            )}
+
             {showMockApi ? (
               <MockApi onClose={() => setShowMockApi(false)} />
             ) : (
