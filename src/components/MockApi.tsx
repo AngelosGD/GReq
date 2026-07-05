@@ -3,6 +3,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { useAuthStore } from '../store/authStore'
 import { getMockApis, saveMockApi, deleteMockApi } from '../lib/database'
 
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
 interface Props {
   onClose: () => void
 }
@@ -209,11 +211,15 @@ export function MockApi({ onClose }: Props) {
   }
 
   const startApi = async (api: MockApiItem) => {
+    if (!isTauri) {
+      alert('El servidor mock solo funciona en la aplicación de escritorio. Usa npm run tauri dev')
+      return
+    }
     try {
       const info = await invoke<{ url: string; id: string }>('start_mock_server', {
         config: {
           path: api.path,
-          method: api.methods[0] ?? 'GET',
+          methods: api.methods,
           status: api.statusCode,
           headers: [],
           body: api.responseBody || defaultBody,
