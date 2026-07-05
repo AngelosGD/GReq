@@ -44,3 +44,4 @@ All Rust structs use `#[serde(rename_all = "camelCase")]` — JS sends `bodyType
 
 ## Known Issues
 - ~~MockApi panel: blank screen on "Generar API" click (requires browser console debugging).~~ Fixed — `crypto.randomUUID()` replaced with `crypto.getRandomValues` + fallback.
+- **invoke hangs when Tauri backend is not ready**: `window.__TAURI_INTERNALS__` is set by Tauri webview preload even before Rust backend is fully compiled/started. `invoke` tries IPC via `http://ipc.localhost` then falls back to `postMessage` but the promise **never rejects** — hangs forever. Fix: `invokeWithTimeout()` wrapper (4s timeout) used in `startApi`. The `startApi` catch block shows the timeout error to user.
