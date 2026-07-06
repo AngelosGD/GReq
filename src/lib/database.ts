@@ -81,10 +81,13 @@ export interface MockApiData {
   method: string
   statusCode: number
   responseBody: string
-  responseHeaders?: string
+  responseHeaders?: { key: string; value: string }[]
   port?: number
   isRunning?: boolean
   serverId?: string | null
+  delayMs?: number
+  methodBodies?: Record<string, { statusCode: number; responseBody: string; responseHeaders: { key: string; value: string }[] }>
+  sampleData?: Record<string, string>[]
 }
 
 export async function getMockApis(userId: string): Promise<MockApiData[]> {

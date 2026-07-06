@@ -511,76 +511,110 @@ export function MainApp() {
         </header>
 
         <div className="flex flex-1 overflow-hidden">
-          <aside className="w-52 flex-shrink-0 border-r border-zinc-200/70 bg-zinc-50/50 flex flex-col p-2.5 gap-2">
+          <aside className="w-52 flex-shrink-0 border-r border-zinc-200/60 bg-white flex flex-col py-2 gap-0.5">
             {sidebarMode === 'options' ? (
               <>
-                <button
-                  onClick={() => { setSidebarMode('nodes'); setShowMockApi(false); }}
-                  className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] ${
-                    !showMockApi
-                      ? 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20'
-                      : 'font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100'
-                  }`}
-                >
-                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-                  </svg>
-                  Hacer peticiones
-                </button>
-                  <AuthGuard label="Inicia sesión para ver el historial de peticiones">
-                  <button
-                    onClick={() => setShowHistory(true)}
-                    className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 active:scale-[0.98] transition-all"
-                  >
-                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Historial
-                  </button>
+                <div className="px-3 pb-1.5">
+                  <div className="relative">
+                    <button
+                      onClick={() => { setSidebarMode('nodes'); setShowMockApi(false); }}
+                      className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
+                        !showMockApi ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
+                      }`}
+                    >
+                      {!showMockApi && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800" />}
+                      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                      </svg>
+                      Hacer peticiones
+                    </button>
+                  </div>
+                </div>
+
+                <div className="px-3 pb-0.5">
+                  <AuthGuard label="Inicia sesión para ver el historial">
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowHistory(true)}
+                        className="flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50 transition-all active:scale-[0.98]"
+                      >
+                        <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Historial
+                      </button>
+                    </div>
                   </AuthGuard>
-                  <AuthGuard label="Inicia sesión para usar la generación de APIs mock">
-                  <button
-                    onClick={() => { setShowMockApi(true); setSelectedNode(null); setSidebarMode('options'); }}
-                    className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] ${
-                      showMockApi
-                        ? 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20'
-                        : 'font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100'
-                    }`}
-                  >
-                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-                    </svg>
-                    Generar API
-                  </button>
+                </div>
+
+                <div className="px-3 pb-0.5">
+                  <AuthGuard label="Inicia sesión para usar APIs mock">
+                    <div className="relative">
+                      <button
+                        onClick={() => { setShowMockApi(true); setSelectedNode(null); setSidebarMode('options'); }}
+                        className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
+                          showMockApi ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
+                        }`}
+                      >
+                        {showMockApi && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800" />}
+                        <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                        </svg>
+                        Generar API
+                      </button>
+                    </div>
                   </AuthGuard>
+                </div>
+
+                <div className="px-3 pb-0.5">
                   <button
                     onClick={() => setShowGithubImport(true)}
-                    className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 active:scale-[0.98] transition-all"
+                    className="flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50 transition-all active:scale-[0.98]"
                   >
                     <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0022 12c0-5.523-4.477-10-10-10z" />
                     </svg>
                     Desde GitHub
                   </button>
-                </>
-              ) : (
+                </div>
+
+                <div className="flex-1" />
+
+                <div className="px-3 pt-2 border-t border-zinc-100">
+                  <button
+                    onClick={() => setShowAiChat(true)}
+                    className="flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50 transition-all active:scale-[0.98]"
+                  >
+                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                    </svg>
+                    Asistente IA
+                  </button>
+                </div>
+              </>
+            ) : (
               <>
-                <button
-                  onClick={() => setSidebarMode('options')}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-xs font-medium
-                             text-zinc-500 hover:bg-zinc-100 transition-colors"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-                  </svg>
-                  Volver
-                </button>
-                <div className="text-[10px] font-semibold text-zinc-400 uppercase tracking-[0.1em] px-1">Nodos</div>
-                <NodeCard type="url" onAdd={addNodeToCanvas} />
-                <NodeCard type="get" onAdd={addNodeToCanvas} />
-                <NodeCard type="post" onAdd={addNodeToCanvas} />
-                <NodeCard type="delete" onAdd={addNodeToCanvas} />
-                <NodeCard type="update" onAdd={addNodeToCanvas} />
+                <div className="px-3">
+                  <button
+                    onClick={() => setSidebarMode('options')}
+                    className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-xs font-medium text-zinc-500 hover:bg-zinc-100 transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                    </svg>
+                    Volver
+                  </button>
+                </div>
+                <div className="px-3 pt-3 pb-1.5">
+                  <div className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em]">Nodos</div>
+                </div>
+                <div className="px-3 space-y-1">
+                  <NodeCard type="url" onAdd={addNodeToCanvas} />
+                  <NodeCard type="get" onAdd={addNodeToCanvas} />
+                  <NodeCard type="post" onAdd={addNodeToCanvas} />
+                  <NodeCard type="delete" onAdd={addNodeToCanvas} />
+                  <NodeCard type="update" onAdd={addNodeToCanvas} />
+                </div>
               </>
             )}
           </aside>
@@ -604,20 +638,31 @@ export function MainApp() {
               </div>
             )}
 
-            {!showAiChat && (
-              <button
-                onClick={() => setShowAiChat(true)}
-                className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 shadow-md transition-all"
-                title="Asistente IA"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                </svg>
-              </button>
-            )}
+
 
             {showMockApi ? (
-              <MockApi onClose={() => setShowMockApi(false)} />
+              <MockApi
+                onClose={() => setShowMockApi(false)}
+                onTestInCanvas={(api) => {
+                  const url = `http://localhost:${api.port}/${api.path}`
+                  const urlNode: Node = {
+                    id: `mock-url-${Date.now()}`,
+                    type: 'url',
+                    position: { x: 100, y: 100 + Math.random() * 200 },
+                    data: { url, title: api.name, params: [], headers: [] },
+                  }
+                  const methodNode: Node = {
+                    id: `mock-method-${Date.now()}`,
+                    type: 'method',
+                    position: { x: 400, y: 100 + Math.random() * 200 },
+                    data: { method: api.methods[0] || 'GET', headers: [], body: '', bodyType: 'json', auth: 'None', authValue: '', repeatCount: 1 },
+                  }
+                  setNodes((nds) => [...nds, urlNode as Node, methodNode as Node])
+                  setEdges((eds) => [...eds, { id: `mock-edge-${Date.now()}`, source: urlNode.id, target: methodNode.id, animated: true }])
+                  takeSnapshot(nodes, edges)
+                  setShowMockApi(false)
+                }}
+              />
             ) : (
               <>
             <Canvas

@@ -13,98 +13,46 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
   return (
     <div
       className={`
-        relative bg-white rounded-2xl transition-all duration-300
-        ${selected
-          ? 'shadow-[0_0_0_2px_rgba(16,185,129,0.2),0_8px_32px_rgba(16,185,129,0.12),0_2px_8px_rgba(0,0,0,0.06)]'
-          : 'shadow-[0_2px_8px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.06),0_12px_32px_rgba(0,0,0,0.05)]'
-        }
+        relative bg-white rounded-xl transition-shadow duration-200
+        border ${selected ? 'border-emerald-400/60 shadow-[0_0_0_1px_rgba(16,185,129,0.15)]' : 'border-zinc-200/70 shadow-sm hover:shadow-md'}
       `}
     >
-      {/* Glass shine overlay */}
-      <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/80 to-transparent pointer-events-none" />
-
-      {/* Gradient border (appears on selection) */}
+      {/* Left accent bar */}
       <div
-        className={`absolute inset-0 rounded-2xl pointer-events-none transition-opacity duration-500 ${
-          selected ? 'opacity-100' : 'opacity-0'
+        className={`absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full transition-all duration-200 ${
+          focused ? 'bg-emerald-400' : 'bg-emerald-400/60'
         }`}
-        style={{
-          padding: 1.5,
-          background: 'linear-gradient(135deg, #34d399, #10b981, #059669)',
-          WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-          WebkitMaskComposite: 'xor',
-          maskComposite: 'exclude',
-        }}
       />
 
-      {/* Base border */}
-      <div
-        className={`
-          absolute inset-0 rounded-2xl pointer-events-none transition-all duration-300
-          ${selected ? 'opacity-0' : 'opacity-100'}
-        `}
-        style={{
-          border: '1.5px solid rgba(0,0,0,0.06)',
-        }}
-      />
-
-      {/* Inner content */}
-      <div className="relative pl-6 pr-4 py-3.5">
-        {/* Title bar */}
+      <div className="relative pl-5 pr-3.5 py-3">
         {data.title && (
-          <div className="absolute -top-2.5 left-6 right-4 flex items-center gap-1.5">
-            <span className="text-[9px] font-bold text-zinc-700 bg-zinc-100/80 px-2 py-0.5 rounded-md truncate max-w-[180px]">
+          <div className="absolute -top-2 left-5 right-3.5 flex items-center gap-1.5">
+            <span className="text-[8px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded truncate max-w-[160px]">
               {data.title}
             </span>
             <div className="h-px flex-1 bg-zinc-100" />
           </div>
         )}
-        {/* Accent bar */}
-        <div
-          className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full transition-all duration-300 ${
-            focused
-              ? 'bg-gradient-to-b from-emerald-400 to-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)]'
-              : 'bg-gradient-to-b from-emerald-400/80 to-emerald-500/80'
-          }`}
-        />
 
-        {/* Header */}
         <div className="flex items-center gap-2 mb-2.5">
-          <div className="relative w-2 h-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 ring-[3px] ring-emerald-400/20" />
-            {selected && (
-              <div className="w-2 h-2 rounded-full bg-emerald-400/30 animate-ping absolute inset-0" />
-            )}
-          </div>
-          <span className="text-[10px] font-semibold text-zinc-400/80 uppercase tracking-[0.18em]">
-            URL
-          </span>
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+          <span className="text-[9px] font-semibold text-zinc-400 uppercase tracking-widest">URL</span>
         </div>
 
-        {/* Input */}
         <div
           className={`
-            flex items-center gap-2.5 rounded-xl border px-3 py-2 transition-all duration-200
-            ${focused || url
-              ? 'border-emerald-400/60 bg-white ring-[3px] ring-emerald-400/10'
-              : 'border-zinc-200/80 bg-zinc-50/70 hover:border-zinc-300/80'
-            }
+            flex items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-all duration-150
+            ${focused || url ? 'border-emerald-400/50 bg-white' : 'border-zinc-200/60 bg-zinc-50/50 hover:border-zinc-300/60'}
           `}
         >
           <svg
-            className={`w-4 h-4 shrink-0 transition-colors duration-200 ${
-              focused || url ? 'text-emerald-400' : 'text-zinc-300'
-            }`}
+            className={`w-3.5 h-3.5 shrink-0 transition-colors ${focused || url ? 'text-emerald-400' : 'text-zinc-300'}`}
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
             strokeWidth={2}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-            />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
           </svg>
           <input
             value={url}
@@ -115,7 +63,7 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder="https://api.ejemplo.com"
-            className="nodrag w-full bg-transparent text-xs font-mono text-zinc-700 placeholder:text-zinc-400/60 outline-none tracking-tight"
+            className="nodrag w-full bg-transparent text-[11px] font-mono text-zinc-700 placeholder:text-zinc-400/50 outline-none"
           />
           {url && (
             <button
@@ -123,9 +71,9 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
                 setUrl('')
                 updateNodeData(id, { url: '' })
               }}
-              className="nodrag p-0.5 rounded hover:bg-zinc-100 text-zinc-300 hover:text-zinc-500 transition-colors"
+              className="nodrag p-0.5 rounded text-zinc-300 hover:text-zinc-500 hover:bg-zinc-100 transition-colors"
             >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -133,27 +81,17 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
         </div>
       </div>
 
-      {/* Target handle (left) — receives from method nodes */}
       <Handle
         type="target"
         position={Position.Left}
-        className="!w-3 !h-3 !border-[2.5px] !border-white !shadow-[0_2px_6px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.4)]"
-        style={{
-          top: '50%',
-          transform: 'translateY(-50%)',
-          background: 'linear-gradient(135deg, #34d399, #059669)',
-        }}
+        className="!w-2.5 !h-2.5 !border-2 !border-white !shadow-sm"
+        style={{ top: '50%', transform: 'translateY(-50%)', background: '#10b981' }}
       />
-      {/* Source handle (right) */}
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-3 !h-3 !border-[2.5px] !border-white !shadow-[0_2px_6px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.4)]"
-        style={{
-          top: '50%',
-          transform: 'translateY(-50%)',
-          background: 'linear-gradient(135deg, #34d399, #059669)',
-        }}
+        className="!w-2.5 !h-2.5 !border-2 !border-white !shadow-sm"
+        style={{ top: '50%', transform: 'translateY(-50%)', background: '#10b981' }}
       />
     </div>
   )

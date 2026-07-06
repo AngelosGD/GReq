@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useAuthStore } from '../store/authStore'
 import { getMockApis, saveMockApi, deleteMockApi } from '../lib/database'
-import { trackServer, untrackServer, getActiveServers } from '../lib/runningServers'
+import { trackServer, untrackServer, getActiveServers, clearTrackedServers } from '../lib/runningServers'
 import { generateMockApi } from '../lib/ai'
+import { KeyValuePair } from '../types'
+import { KeyValueEditor } from './KeyValueEditor'
 
 const invokeWithTimeout = <T,>(cmd: string, args: Record<string, unknown>, ms = 4000): Promise<T> =>
   Promise.race([
@@ -13,6 +15,7 @@ const invokeWithTimeout = <T,>(cmd: string, args: Record<string, unknown>, ms = 
 
 interface Props {
   onClose: () => void
+  onTestInCanvas?: (api: MockApiItem) => void
 }
 
 const methods = ['GET', 'POST', 'DELETE', 'UPDATE'] as const
@@ -28,12 +31,10 @@ const methodColors: Record<string, { dot: string; badge: string; text: string }>
 interface FieldDef {
   name: string
   type: string
+  value?: string
 }
 
 const FIELD_TYPES = ['string', 'int', 'bool'] as const
-
-const typeDisplay = (type: string) =>
-  type === 'int' ? 0 : type === 'bool' ? false : '"string"'
 
 interface MockApiItem {
   id: string
@@ -47,6 +48,10 @@ interface MockApiItem {
   serverId: string | null
   statusCode: number
   responseBody: string
+  responseHeaders: KeyValuePair[]
+  delayMs: number
+  methodBodies: Record<string, { statusCode: number; responseBody: string; responseHeaders: KeyValuePair[] }>
+  sampleData: Record<string, string>[]
 }
 
 type FilterMethod = 'Todas' | 'GET' | 'POST' | 'DELETE' | 'UPDATE'
@@ -72,7 +77,7 @@ function genId(): string {
   }
 }
 
-export function MockApi({ onClose }: Props) {
+export function MockApi({ onClose, onTestInCanvas }: Props) {
   const user = useAuthStore((s) => s.user)
   const [filter, setFilter] = useState<FilterMethod>('Todas')
   const [search, setSearch] = useState('')
@@ -86,7 +91,7 @@ export function MockApi({ onClose }: Props) {
         name: a.name ?? 'Sin nombre',
         methods: Array.isArray(a.methods) ? a.methods : (a.method ? [a.method] : ['GET']),
         fields: Array.isArray(a.fields)
-          ? a.fields.map((f: any) => typeof f === 'string' ? { name: f, type: 'string' } : { name: f.name ?? '', type: f.type ?? 'string' })
+          ? a.fields.map((f: any) => typeof f === 'string' ? { name: f, type: 'string' } : { name: f.name ?? '', type: f.type ?? 'string', value: f.value ?? '' })
           : [],
         pinned: typeof a.pinned === 'boolean' ? a.pinned : false,
         path: a.path ?? '',
@@ -95,6 +100,10 @@ export function MockApi({ onClose }: Props) {
         serverId: a.serverId ?? null,
         statusCode: a.statusCode ?? 200,
         responseBody: a.responseBody ?? '',
+        responseHeaders: Array.isArray(a.responseHeaders) ? a.responseHeaders : [],
+        delayMs: a.delayMs ?? 0,
+        methodBodies: a.methodBodies ?? {},
+        sampleData: Array.isArray(a.sampleData) ? a.sampleData : [],
       }))
     } catch {
       return []
@@ -109,7 +118,7 @@ export function MockApi({ onClose }: Props) {
           name: a.name ?? '',
         methods: Array.isArray(a.methods) ? a.methods : (a.method ? [a.method] : ['GET']),
         fields: Array.isArray(a.fields)
-          ? a.fields.map((f: any) => typeof f === 'string' ? { name: f, type: 'string' } : { name: f.name ?? '', type: f.type ?? 'string' })
+          ? a.fields.map((f: any) => typeof f === 'string' ? { name: f, type: 'string' } : { name: f.name ?? '', type: f.type ?? 'string', value: f.value ?? '' })
           : [],
         pinned: typeof a.pinned === 'boolean' ? a.pinned : false,
           path: a.path ?? '',
@@ -118,6 +127,10 @@ export function MockApi({ onClose }: Props) {
           serverId: a.serverId ?? null,
           statusCode: a.statusCode ?? 200,
           responseBody: a.responseBody ?? '',
+          responseHeaders: Array.isArray(a.responseHeaders) ? a.responseHeaders : [],
+          delayMs: a.delayMs ?? 0,
+          methodBodies: a.methodBodies ?? {},
+          sampleData: Array.isArray(a.sampleData) ? a.sampleData : [],
         }))
         setMockApis(items)
         localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
@@ -136,6 +149,8 @@ export function MockApi({ onClose }: Props) {
   const [formTempFields, setFormTempFields] = useState<FieldDef[]>([])
   const [formNewFieldName, setFormNewFieldName] = useState('')
   const [formNewFieldType, setFormNewFieldType] = useState<string>('string')
+  const [formNewFieldValue, setFormNewFieldValue] = useState('')
+  const [formSampleData, setFormSampleData] = useState<Record<string, string>[]>([])
   const [formPath, setFormPath] = useState('')
   const [formPort, setFormPort] = useState('')
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
@@ -143,6 +158,14 @@ export function MockApi({ onClose }: Props) {
   const [aiLoading, setAiLoading] = useState(false)
 
   const [deleteTarget, setDeleteTarget] = useState<MockApiItem | null>(null)
+  const [inspectLog, setInspectLog] = useState<{ method: string; path: string; body: string } | null>(null)
+  const [inspectLoading, setInspectLoading] = useState(false)
+
+  const [editing, setEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editPath, setEditPath] = useState('')
+  const [editPort, setEditPort] = useState('')
+  const [editMethods, setEditMethods] = useState<string[]>([])
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(mockApis.slice(0, 20)))
@@ -158,6 +181,10 @@ export function MockApi({ onClose }: Props) {
           method: api.methods[0] ?? 'GET',
           statusCode: api.statusCode,
           responseBody: api.responseBody,
+          responseHeaders: api.responseHeaders,
+          delayMs: api.delayMs,
+          methodBodies: api.methodBodies,
+          sampleData: api.sampleData,
           port: api.port,
           isRunning: api.running,
           serverId: api.serverId,
@@ -176,8 +203,9 @@ export function MockApi({ onClose }: Props) {
 
   const handleAddField = () => {
     if (!formNewFieldName.trim()) return
-    setFormTempFields((prev) => [...prev, { name: formNewFieldName.trim(), type: formNewFieldType }])
+    setFormTempFields((prev) => [...prev, { name: formNewFieldName.trim(), type: formNewFieldType, value: formNewFieldValue || undefined }])
     setFormNewFieldName('')
+    setFormNewFieldValue('')
     setFormErrors((e) => ({ ...e, fields: '' }))
   }
 
@@ -191,10 +219,37 @@ export function MockApi({ onClose }: Props) {
     setFormTempFields([])
     setFormNewFieldName('')
     setFormNewFieldType('string')
+    setFormNewFieldValue('')
+    setFormSampleData([])
     setFormPath('')
-    setFormPort(String(randomPort()))
     setFormErrors({})
     setAiDescription('')
+  }
+
+  useEffect(() => {
+    if (formTempFields.length > 0 && formSampleData.length === 0) {
+      const row: Record<string, string> = {}
+      for (const f of formTempFields) {
+        row[f.name] = f.value ?? ''
+      }
+      setFormSampleData([row])
+    }
+  }, [formTempFields])
+
+  const addSampleRow = () => {
+    const row: Record<string, string> = {}
+    for (const f of formTempFields) {
+      row[f.name] = f.value ?? ''
+    }
+    setFormSampleData((prev) => [...prev, row])
+  }
+
+  const removeSampleRow = (idx: number) => {
+    setFormSampleData((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  const updateSampleRow = (idx: number, field: string, value: string) => {
+    setFormSampleData((prev) => prev.map((row, i) => (i === idx ? { ...row, [field]: value } : row)))
   }
 
   const filtered = mockApis
@@ -230,14 +285,25 @@ export function MockApi({ onClose }: Props) {
 
   const startApi = async (api: MockApiItem) => {
     try {
+      const reqHeaders = api.responseHeaders ?? []
+      const methodConfigs = Object.entries(api.methodBodies ?? {}).map(([m, cfg]) => ({
+        method: m,
+        status: cfg.statusCode ?? api.statusCode,
+        headers: cfg.responseHeaders ?? reqHeaders,
+        body: cfg.responseBody || defaultBody,
+      }))
       const info = await invokeWithTimeout<{ url: string; id: string }>('start_mock_server', {
         config: {
           path: api.path,
           methods: api.methods,
           status: api.statusCode,
-          headers: [],
+          headers: reqHeaders,
           body: api.responseBody || defaultBody,
           port: api.port,
+          delayMs: api.delayMs,
+          methodConfigs,
+          fields: api.fields,
+          sampleData: api.sampleData,
         },
       })
       const url = new URL(info.url)
@@ -269,6 +335,7 @@ export function MockApi({ onClose }: Props) {
   }
 
   const restoreServers = () => {
+    clearTrackedServers()
     for (const item of restoreList) {
       const api = mockApis.find((a) => a.id === item.apiId)
       if (api) startApi(api)
@@ -320,6 +387,7 @@ export function MockApi({ onClose }: Props) {
     }
 
     const id = genId()
+    const cleanSampleData = formSampleData.filter((row) => Object.values(row).some((v) => v.trim()))
     const api: MockApiItem = {
       id,
       name: formName.trim(),
@@ -331,12 +399,30 @@ export function MockApi({ onClose }: Props) {
       running: false,
       serverId: null,
       statusCode: 200,
-      responseBody: formTempFields.length > 0
+      responseHeaders: [],
+      delayMs: 0,
+      methodBodies: {},
+      sampleData: cleanSampleData,
+      responseBody: cleanSampleData.length > 0
         ? JSON.stringify(
-            Object.fromEntries(formTempFields.map((f) => [
-              f.name,
-              f.type === 'int' ? 0 : f.type === 'bool' ? false : 'string',
-            ])),
+            cleanSampleData.map((row, i) => ({
+              id: i + 1,
+              ...Object.fromEntries(
+                formTempFields.map((f) => {
+                  let val: any
+                  if (row[f.name]) {
+                    if (f.type === 'int') val = Number(row[f.name])
+                    else if (f.type === 'bool') val = row[f.name] === 'true' || row[f.name] === '1'
+                    else val = row[f.name]
+                  } else {
+                    if (f.type === 'int') val = 0
+                    else if (f.type === 'bool') val = false
+                    else val = ''
+                  }
+                  return [f.name, val]
+                })
+              ),
+            })),
             null,
             2
           )
@@ -370,21 +456,130 @@ export function MockApi({ onClose }: Props) {
     setDeleteTarget(null)
   }
 
-  const setStatusCode = (apiId: string, code: number) => {
-    setMockApis((a) => a.map((x) => (x.id === apiId ? { ...x, statusCode: code } : x)))
+  const setDelayMs = (apiId: string, ms: number) => {
+    setMockApis((a) => a.map((x) => (x.id === apiId ? { ...x, delayMs: ms } : x)))
   }
 
-  const setResponseBody = (apiId: string, body: string) => {
-    setMockApis((a) => a.map((x) => (x.id === apiId ? { ...x, responseBody: body } : x)))
+  const setMethodStatusCode = (apiId: string, method: string, code: number) => {
+    setMockApis((a) => a.map((x) =>
+      x.id === apiId
+        ? { ...x, methodBodies: { ...x.methodBodies, [method]: { ...(x.methodBodies[method] ?? { responseBody: x.responseBody, responseHeaders: x.responseHeaders }), statusCode: code } } }
+        : x
+    ))
+  }
+
+  const setMethodResponseBody = (apiId: string, method: string, body: string) => {
+    setMockApis((a) => a.map((x) =>
+      x.id === apiId
+        ? { ...x, methodBodies: { ...x.methodBodies, [method]: { ...(x.methodBodies[method] ?? { statusCode: x.statusCode, responseHeaders: x.responseHeaders }), responseBody: body } } }
+        : x
+    ))
+  }
+
+  const setMethodResponseHeaders = (apiId: string, method: string, headers: KeyValuePair[]) => {
+    setMockApis((a) => a.map((x) =>
+      x.id === apiId
+        ? { ...x, methodBodies: { ...x.methodBodies, [method]: { ...(x.methodBodies[method] ?? { statusCode: x.statusCode, responseBody: x.responseBody }), responseHeaders: headers } } }
+        : x
+    ))
+  }
+
+  const effStatusCode = (api: MockApiItem, method: string) =>
+    api.methodBodies?.[method]?.statusCode ?? api.statusCode
+  const effResponseBody = (api: MockApiItem, method: string) =>
+    api.methodBodies?.[method]?.responseBody ?? api.responseBody
+  const effResponseHeaders = (api: MockApiItem, method: string) =>
+    api.methodBodies?.[method]?.responseHeaders ?? api.responseHeaders ?? []
+
+  const fetchInspect = async (api: MockApiItem) => {
+    setInspectLoading(true)
+    try {
+      const res = await fetch(`http://localhost:${api.port}/__inspect`)
+      if (res.ok) {
+        const data = await res.json()
+        setInspectLog(data)
+      } else {
+        setInspectLog(null)
+        alert('No hay peticiones registradas aún')
+      }
+    } catch {
+      alert('Error al consultar el inspector')
+    } finally {
+      setInspectLoading(false)
+    }
+  }
+
+  const genCurl = (api: MockApiItem, method: string) => {
+    const body = effResponseBody(api, method)
+    const pairs: string[] = [`curl -X ${method} "http://localhost:${api.port}/${api.path}"`]
+    for (const h of effResponseHeaders(api, method)) {
+      if (h.key) pairs.push(`  -H "${h.key}: ${h.value}"`)
+    }
+    if (body && (method === 'POST' || method === 'UPDATE')) {
+      pairs.push(`  -d '${body.replace(/'/g, "\\'")}'`)
+    }
+    return pairs.join(' \\\n')
   }
 
   const togglePin = (apiId: string) => {
     setMockApis((a) => a.map((x) => (x.id === apiId ? { ...x, pinned: !x.pinned } : x)))
   }
 
+  const startEditing = (api: MockApiItem) => {
+    setEditName(api.name)
+    setEditPath(api.path)
+    setEditPort(String(api.port))
+    setEditMethods([...api.methods])
+    setEditing(true)
+  }
+
+  const saveEditing = (api: MockApiItem) => {
+    const port = Number(editPort)
+    if (!editName.trim() || !editPath.trim() || !editPort.trim() || isNaN(port) || port < 1 || port > 65535 || editMethods.length === 0) return
+    setMockApis((a) => a.map((x) =>
+      x.id === api.id
+        ? { ...x, name: editName.trim(), path: editPath.trim(), port, methods: editMethods }
+        : x
+    ))
+    setEditing(false)
+  }
+
+  const cancelEditing = () => setEditing(false)
+
+  const duplicateApi = (api: MockApiItem) => {
+    if (mockApis.length >= 20) {
+      alert('Límite de 20 APIs de prueba alcanzado')
+      return
+    }
+    const id = genId()
+    const copy: MockApiItem = {
+      ...JSON.parse(JSON.stringify(api)),
+      id,
+      name: `${api.name} (copia)`,
+      running: false,
+      serverId: null,
+      port: randomPort(),
+    }
+    setMockApis((a) => [...a, copy])
+    selectApi(id)
+  }
+
+  const exportApi = (api: MockApiItem) => {
+    const blob = new Blob([JSON.stringify(api, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `mock-${api.name.replace(/\s+/g, '-').toLowerCase()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const prevApiIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (activeApi) {
+    if (activeApi && activeApi.id !== prevApiIdRef.current) {
+      prevApiIdRef.current = activeApi.id
       setActiveMethod(activeApi.methods[0] ?? 'GET')
+      setEditing(false)
     }
   }, [activeApi])
 
@@ -413,12 +608,13 @@ export function MockApi({ onClose }: Props) {
                 key={m}
                 onClick={() => setFilter(m)}
                 className={`px-2 py-1 rounded-md text-[10px] font-medium flex items-center gap-1.5 transition-all ${
-                  act ? 'text-white' : 'text-zinc-400 hover:text-zinc-600'
+                  act ? 'text-zinc-800' : 'text-zinc-400 hover:text-zinc-600'
                 }`}
-                style={act && c ? { backgroundColor: c.dot } : act ? { backgroundColor: '#18181b' } : undefined}
               >
-                {c && (
-                  <span className={`w-1.5 h-1.5 rounded-full ${act ? 'bg-white/70' : ''}`} style={!act ? { backgroundColor: c.dot } : undefined} />
+                {c ? (
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c.dot }} />
+                ) : (
+                  <span className={`w-1.5 h-1.5 rounded-full ${act ? 'bg-zinc-800' : 'bg-zinc-300'}`} />
                 )}
                 {m}
               </button>
@@ -492,14 +688,14 @@ export function MockApi({ onClose }: Props) {
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
-                          <div className="flex gap-0.5 flex-wrap">
+                          <div className="flex gap-1 flex-wrap">
                             {api.methods.map((m) => {
                               const c = methodColors[m]
                               return (
                                 <span
                                   key={m}
-                                  className="text-[8px] font-semibold uppercase px-1 py-px rounded"
-                                  style={{ backgroundColor: c?.badge ?? '#f4f4f5', color: c?.text ?? '#a1a1aa' }}
+                                  className="text-[8px] font-medium uppercase tracking-wider"
+                                  style={{ color: c?.text ?? '#a1a1aa' }}
                                 >
                                   {m}
                                 </span>
@@ -608,81 +804,211 @@ export function MockApi({ onClose }: Props) {
             <div className="px-6 pt-4 pb-3 border-b border-zinc-100">
               <div className="flex items-start justify-between">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-base font-semibold text-zinc-900 truncate">{activeApi.name}</h3>
-                    <button
-                      onClick={() => togglePin(activeApi.id)}
-                      className="shrink-0 w-5 h-5 flex items-center justify-center"
-                    >
-                      <svg className={`w-3.5 h-3.5 ${activeApi.pinned ? 'text-amber-400 fill-amber-400' : 'text-zinc-200 hover:text-zinc-400'}`} viewBox="0 0 24 24" fill={activeApi.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
-                      </svg>
-                    </button>
-                    <span className={`text-[10px] font-medium ${activeApi.running ? 'text-emerald-600' : 'text-zinc-400'}`}>
-                      {activeApi.running ? 'Activo' : 'Detenido'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <code className="text-[11px] font-mono text-zinc-400 truncate">
-                      http://localhost:{activeApi.port}/{activeApi.path}
-                    </code>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(`http://localhost:${activeApi.port}/${activeApi.path}`)}
-                      className="p-0.5 rounded text-zinc-300 hover:text-zinc-500 transition-colors shrink-0"
-                    >
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
-                      </svg>
-                    </button>
-                  </div>
-                  {/* Method tabs */}
-                  {activeApi.methods.length > 1 && (
-                    <div className="flex gap-1 mt-3">
-                      {activeApi.methods.map((m) => (
-                        <button
-                          key={m}
-                          onClick={() => setActiveMethod(m)}
-                          className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all ${
-                            activeMethod === m ? 'text-white' : 'text-zinc-400 hover:text-zinc-600 bg-zinc-50 hover:bg-zinc-100'
-                          }`}
-                          style={activeMethod === m ? { backgroundColor: methodColors[m]?.dot ?? '#18181b' } : undefined}
-                        >
-                          {m}
-                        </button>
-                      ))}
+                  {editing ? (
+                    <div className="space-y-2">
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="w-full bg-zinc-50 border border-zinc-200/60 rounded-lg px-3 py-1.5 text-sm font-semibold text-zinc-800 outline-none focus:border-zinc-300 transition-all"
+                      />
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="text-[8px] font-semibold text-zinc-400 uppercase tracking-wider block mb-0.5">Puerto</label>
+                          <input
+                            value={editPort}
+                            onChange={(e) => setEditPort(e.target.value)}
+                            className="w-full bg-zinc-50 border border-zinc-200/60 rounded-lg px-2.5 py-1.5 text-xs font-mono text-zinc-700 outline-none focus:border-zinc-300 transition-all"
+                          />
+                        </div>
+                        <div className="flex-[2]">
+                          <label className="text-[8px] font-semibold text-zinc-400 uppercase tracking-wider block mb-0.5">Ruta</label>
+                          <div className="flex items-center gap-1 bg-zinc-50 border border-zinc-200/60 rounded-lg px-2.5 py-1.5">
+                            <span className="text-xs text-zinc-300 font-mono">/</span>
+                            <input
+                              value={editPath}
+                              onChange={(e) => setEditPath(e.target.value)}
+                              className="flex-1 text-xs font-mono text-zinc-700 outline-none bg-transparent"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[8px] font-semibold text-zinc-400 uppercase tracking-wider block mb-0.5">Métodos</label>
+                        <div className="flex gap-1">
+                          {methods.map((m) => {
+                            const selected = editMethods.includes(m)
+                            return (
+                              <button
+                                key={m}
+                                onClick={() => setEditMethods((prev) =>
+                                  prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
+                                )}
+                                className={`flex-1 px-2 py-1 rounded-md text-[8px] font-bold uppercase tracking-wider transition-all ${
+                                  selected ? 'text-white' : 'bg-zinc-50 text-zinc-400 hover:bg-zinc-100'
+                                }`}
+                                style={selected ? { backgroundColor: methodColors[m].dot } : undefined}
+                              >
+                                {m}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
                     </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-base font-semibold text-zinc-900 truncate">{activeApi.name}</h3>
+                        <button
+                          onClick={() => togglePin(activeApi.id)}
+                          className="shrink-0 w-5 h-5 flex items-center justify-center"
+                        >
+                          <svg className={`w-3.5 h-3.5 ${activeApi.pinned ? 'text-amber-400 fill-amber-400' : 'text-zinc-200 hover:text-zinc-400'}`} viewBox="0 0 24 24" fill={activeApi.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                          </svg>
+                        </button>
+                        <span className={`text-[10px] font-medium ${activeApi.running ? 'text-emerald-600' : 'text-zinc-400'}`}>
+                          {activeApi.running ? 'Activo' : 'Detenido'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-[11px] font-mono text-zinc-400 truncate">
+                          http://localhost:{activeApi.port}/{activeApi.path}
+                        </code>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(`http://localhost:${activeApi.port}/${activeApi.path}`)}
+                          className="p-0.5 rounded text-zinc-300 hover:text-zinc-500 transition-colors shrink-0"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+                          </svg>
+                        </button>
+                      </div>
+                      {activeApi.methods.length > 1 && (
+                        <div className="flex gap-0 mt-3">
+                          {activeApi.methods.map((m) => {
+                            const c = methodColors[m]
+                            return (
+                              <button
+                                key={m}
+                                onClick={() => setActiveMethod(m)}
+                                className={`px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider transition-all ${
+                                  activeMethod === m
+                                    ? 'text-zinc-900 border-b-2'
+                                    : 'text-zinc-400 hover:text-zinc-600 border-b-2 border-transparent'
+                                }`}
+                                style={activeMethod === m ? { borderBottomColor: c?.dot, color: c?.dot } : undefined}
+                              >
+                                {m}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {activeApi.running ? (
-                    <button
-                      onClick={() => stopApi(activeApi)}
-                      className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-red-50 text-red-600 hover:bg-red-100 active:scale-[0.98] transition-all flex items-center gap-1.5"
-                    >
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9A2.25 2.25 0 015.25 16.5v-9z" />
-                      </svg>
-                      Detener
-                    </button>
+                  {editing ? (
+                    <>
+                      <button
+                        onClick={() => saveEditing(activeApi)}
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-zinc-900 text-white hover:bg-zinc-800 active:scale-[0.98] transition-all"
+                      >
+                        Guardar
+                      </button>
+                      <button
+                        onClick={cancelEditing}
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 hover:bg-zinc-100 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </>
                   ) : (
-                    <button
-                      onClick={() => startApi(activeApi)}
-                      className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-zinc-900 text-white hover:bg-zinc-800 active:scale-[0.98] transition-all flex items-center gap-1.5"
-                    >
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-                      </svg>
-                      Iniciar
-                    </button>
+                    <>
+                      {activeApi.running ? (
+                        <button
+                          onClick={() => stopApi(activeApi)}
+                          className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-red-50 text-red-600 hover:bg-red-100 active:scale-[0.98] transition-all flex items-center gap-1.5"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9A2.25 2.25 0 015.25 16.5v-9z" />
+                          </svg>
+                          Detener
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => startApi(activeApi)}
+                          className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-zinc-900 text-white hover:bg-zinc-800 active:scale-[0.98] transition-all flex items-center gap-1.5"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                          </svg>
+                          Iniciar
+                        </button>
+                      )}
+                      {!activeApi.running && (
+                        <button
+                          onClick={() => startEditing(activeApi)}
+                          className="px-3 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 hover:bg-zinc-100 active:scale-[0.98] transition-all flex items-center gap-1.5"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                          </svg>
+                          Editar
+                        </button>
+                      )}
+                      {activeApi.running && (
+                        <button
+                          onClick={() => fetchInspect(activeApi)}
+                          disabled={inspectLoading}
+                          className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-zinc-50 text-zinc-500 hover:bg-zinc-100 active:scale-[0.98] transition-all flex items-center gap-1.5"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                          </svg>
+                          {inspectLoading ? '...' : 'Inspeccionar'}
+                        </button>
+                      )}
+                      {activeApi.running && onTestInCanvas && (
+                        <button
+                          onClick={() => onTestInCanvas(activeApi)}
+                          className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-50 text-emerald-600 hover:bg-emerald-100 active:scale-[0.98] transition-all flex items-center gap-1.5"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                          </svg>
+                          Probar
+                        </button>
+                      )}
+                      <button
+                        onClick={() => duplicateApi(activeApi)}
+                        className="p-1.5 rounded-lg text-zinc-300 hover:text-zinc-500 hover:bg-zinc-100 transition-all"
+                        title="Duplicar"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => exportApi(activeApi)}
+                        className="p-1.5 rounded-lg text-zinc-300 hover:text-zinc-500 hover:bg-zinc-100 transition-all"
+                        title="Exportar"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => confirmDelete(activeApi)}
+                        className="p-1.5 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                      </button>
+                    </>
                   )}
-                  <button
-                    onClick={() => confirmDelete(activeApi)}
-                    className="p-1.5 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                    </svg>
-                  </button>
                 </div>
               </div>
             </div>
@@ -704,61 +1030,66 @@ export function MockApi({ onClose }: Props) {
               </section>
 
               <section>
-                <h4 className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] mb-2.5">
-                  {activeMethod === 'GET' && 'Response schema'}
-                  {activeMethod === 'POST' && 'Request body'}
-                  {activeMethod === 'DELETE' && 'Route params'}
-                  {activeMethod === 'UPDATE' && 'Updatable fields'}
-                </h4>
-                <div className="bg-zinc-50 rounded-xl p-3">
+                <h4 className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] mb-2.5">Comportamiento — <span className="text-zinc-600">{activeMethod}</span></h4>
+                <div className="bg-zinc-50 rounded-xl p-3 space-y-2">
                   {activeMethod === 'GET' && (
-                    <div className="flex flex-wrap gap-2">
-                      {activeApi.fields.length > 0 ? activeApi.fields.map((f) => (
-                        <div key={f.name} className="flex items-center gap-1.5 bg-white border border-zinc-200/60 rounded-md px-2.5 py-1">
-                          <code className="text-[10px] font-mono text-zinc-600">:{f.name}</code>
-                          <span className="text-[8px] font-mono text-zinc-400 bg-zinc-100 px-1 rounded">{f.type}</span>
-                        </div>
-                      )) : (
-                        <span className="text-[10px] text-zinc-400 italic">Sin campos definidos</span>
-                      )}
-                    </div>
+                    <>
+                      <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                        <span className="px-1.5 py-0.5 rounded bg-zinc-200/60 font-mono text-[9px]">GET /{activeApi.path}</span>
+                        <span>→ array con 3 elementos</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                        <span className="px-1.5 py-0.5 rounded bg-zinc-200/60 font-mono text-[9px]">GET /{activeApi.path}/:id</span>
+                        <span>→ un elemento por ID</span>
+                      </div>
+                    </>
                   )}
                   {activeMethod === 'POST' && (
-                    <div className="bg-white border border-zinc-200/60 rounded-lg p-2.5 font-mono text-[10px] text-zinc-500 leading-relaxed">
-                      {activeApi.fields.length > 0
-                        ? `{\n${activeApi.fields.map((f) => `  "${f.name}": ${typeDisplay(f.type)}`).join(',\n')}\n}`
-                        : '{\n  // Sin campos definidos\n}'}
-                    </div>
+                    <>
+                      <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                        <span className="px-1.5 py-0.5 rounded bg-zinc-200/60 font-mono text-[9px]">POST /{activeApi.path}</span>
+                        <span>→ crea recurso, genera ID auto</span>
+                      </div>
+                      <p className="text-[9px] text-zinc-400">Envía body con los campos, se mezcla con los valores por defecto</p>
+                    </>
                   )}
                   {activeMethod === 'DELETE' && (
-                    <div className="flex flex-wrap gap-2">
-                      {activeApi.fields.length > 0 ? activeApi.fields.map((f) => (
-                        <div key={f.name} className="flex items-center gap-1.5 bg-white border border-zinc-200/60 rounded-md px-3 py-1.5">
-                          <code className="text-[11px] font-mono text-zinc-700">:{f.name}</code>
-                          <span className="text-[8px] font-mono text-zinc-400 bg-zinc-100 px-1 rounded">{f.type}</span>
-                        </div>
-                      )) : (
-                        <span className="text-[10px] text-zinc-400 italic">Sin campos definidos</span>
-                      )}
-                    </div>
+                    <>
+                      <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                        <span className="px-1.5 py-0.5 rounded bg-zinc-200/60 font-mono text-[9px]">DELETE /{activeApi.path}/:id</span>
+                        <span>→ elimina recurso por ID</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <code className="text-[10px] font-mono text-zinc-500">:id</code>
+                        <span className="text-[9px] text-zinc-400">— path param obligatorio (último segmento de la ruta)</span>
+                      </div>
+                    </>
                   )}
                   {activeMethod === 'UPDATE' && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {activeApi.fields.length > 0 ? activeApi.fields.map((f) => (
-                        <div key={f.name} className="flex items-center gap-1.5 bg-white border border-zinc-200/60 rounded-md px-2.5 py-1">
-                          <span className="text-[10px] font-mono text-zinc-600">{f.name}</span>
-                          <span className="text-[8px] font-mono text-zinc-400 bg-zinc-100 px-1 rounded">{f.type}</span>
+                    <>
+                      <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                        <span className="px-1.5 py-0.5 rounded bg-zinc-200/60 font-mono text-[9px]">UPDATE /{activeApi.path}/:id</span>
+                        <span>→ actualiza recurso por ID</span>
+                      </div>
+                      <p className="text-[9px] text-zinc-400">Envía body con los campos a actualizar + <code className="font-mono text-zinc-500">:id</code> en la ruta</p>
+                    </>
+                  )}
+                  {activeApi.fields.length > 0 && activeMethod !== 'DELETE' && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {activeApi.fields.map((f) => (
+                        <div key={f.name} className="flex items-center gap-1 bg-white border border-zinc-200/60 rounded-md px-2 py-1">
+                          <code className="text-[9px] font-mono text-zinc-600">{f.name}</code>
+                          {f.value && <span className="text-[8px] text-zinc-400">: <span className="font-mono">{f.value}</span></span>}
+                          <span className="text-[7px] font-mono text-zinc-400 bg-zinc-100 px-0.5 rounded">{f.type}</span>
                         </div>
-                      )) : (
-                        <span className="text-[10px] text-zinc-400 italic">Sin campos definidos</span>
-                      )}
+                      ))}
                     </div>
                   )}
                 </div>
               </section>
 
               <section>
-                <h4 className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] mb-2.5">Response</h4>
+                <h4 className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] mb-2.5">Response — <span className="text-zinc-600">{activeMethod}</span></h4>
                 <div className="bg-zinc-50 rounded-xl p-3 space-y-3">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-zinc-400 font-medium">Status</span>
@@ -766,9 +1097,9 @@ export function MockApi({ onClose }: Props) {
                       {[200, 201, 400, 404, 500].map((s) => (
                         <button
                           key={s}
-                          onClick={() => setStatusCode(activeApi.id, s)}
+                          onClick={() => setMethodStatusCode(activeApi.id, activeMethod, s)}
                           className={`px-2 py-0.5 rounded text-[9px] font-mono font-medium transition-all ${
-                            activeApi.statusCode === s ? 'bg-zinc-800 text-white' : 'bg-white text-zinc-400 hover:bg-zinc-100'
+                            effStatusCode(activeApi, activeMethod) === s ? 'bg-zinc-800 text-white' : 'bg-white text-zinc-400 hover:bg-zinc-100'
                           }`}
                         >
                           {s}
@@ -777,10 +1108,58 @@ export function MockApi({ onClose }: Props) {
                     </div>
                   </div>
                   <textarea
-                    value={activeApi.responseBody}
-                    onChange={(e) => setResponseBody(activeApi.id, e.target.value)}
+                    value={effResponseBody(activeApi, activeMethod)}
+                    onChange={(e) => setMethodResponseBody(activeApi.id, activeMethod, e.target.value)}
                     className="w-full bg-white border border-zinc-200/60 rounded-lg p-2.5 font-mono text-[10px] text-zinc-600 outline-none focus:border-zinc-300 transition-all resize-none h-24"
                   />
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(genCurl(activeApi, activeMethod))
+                      }}
+                      className="text-[10px] font-medium text-zinc-400 hover:text-zinc-600 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+                      </svg>
+                      Copiar cURL
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] mb-2.5">Response Headers — <span className="text-zinc-600">{activeMethod}</span></h4>
+                <div className="bg-zinc-50 rounded-xl p-3">
+                  <KeyValueEditor
+                    pairs={effResponseHeaders(activeApi, activeMethod)}
+                    onChange={(pairs) => setMethodResponseHeaders(activeApi.id, activeMethod, pairs)}
+                    keyLabel="Header"
+                    valueLabel="Value"
+                  />
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] mb-2.5">Latencia</h4>
+                <div className="bg-zinc-50 rounded-xl p-3">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min={0}
+                      max={5000}
+                      step={100}
+                      value={activeApi.delayMs}
+                      onChange={(e) => setDelayMs(activeApi.id, Number(e.target.value))}
+                      className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer bg-zinc-200 accent-zinc-900"
+                    />
+                    <span className="text-xs font-mono text-zinc-600 w-16 text-right">
+                      {activeApi.delayMs}ms
+                    </span>
+                  </div>
+                  <p className="text-[9px] text-zinc-400 mt-1.5">
+                    Simula latencia de red antes de responder
+                  </p>
                 </div>
               </section>
             </div>
@@ -884,9 +1263,10 @@ export function MockApi({ onClose }: Props) {
                 <label className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] block mb-1.5">Campos</label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {formTempFields.map((f, i) => (
-                    <div key={i} className="flex items-center gap-1 bg-zinc-100 rounded-md px-2 py-1">
+                    <div key={i} className="flex items-center gap-1.5 bg-zinc-100 rounded-md px-2 py-1">
                       <span className="text-[10px] font-mono text-zinc-700">{f.name}</span>
-                      <span className="text-[8px] font-mono text-zinc-400">{f.type}</span>
+                      {f.value && <span className="text-[9px] text-zinc-500">: <span className="font-mono">{f.value}</span></span>}
+                      <span className="text-[8px] font-mono text-zinc-400 bg-zinc-200/60 px-1 rounded">{f.type}</span>
                       <button
                         onClick={() => handleRemoveField(i)}
                         className="ml-0.5 w-3.5 h-3.5 flex items-center justify-center rounded text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-colors"
@@ -908,13 +1288,28 @@ export function MockApi({ onClose }: Props) {
                   />
                   <select
                     value={formNewFieldType}
-                    onChange={(e) => setFormNewFieldType(e.target.value)}
+                    onChange={(e) => {
+                      setFormNewFieldType(e.target.value)
+                      if (e.target.value === 'bool') setFormNewFieldValue('true')
+                      if (e.target.value === 'int') setFormNewFieldValue(formNewFieldValue.replace(/\D/g, ''))
+                    }}
                     className="bg-zinc-50 border border-zinc-200/60 rounded-lg px-2 py-1.5 text-[10px] font-mono text-zinc-600 outline-none focus:border-zinc-300 transition-all"
                   >
                     {FIELD_TYPES.map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
+                  <input
+                    value={formNewFieldValue}
+                    onChange={(e) => {
+                      let v = e.target.value
+                      if (formNewFieldType === 'int') v = v.replace(/\D/g, '')
+                      setFormNewFieldValue(v)
+                    }}
+                    placeholder={formNewFieldType === 'int' ? '0' : formNewFieldType === 'bool' ? 'true' : 'valor'}
+                    className="flex-1 bg-zinc-50 border border-zinc-200/60 rounded-lg px-2.5 py-1.5 text-xs font-mono text-zinc-700 outline-none focus:border-zinc-300 transition-all placeholder-zinc-300"
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddField() } }}
+                  />
                   <button
                     onClick={handleAddField}
                     className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 active:scale-[0.98] transition-all"
@@ -926,6 +1321,44 @@ export function MockApi({ onClose }: Props) {
               </div>
               {formErrors.fields && <p className="text-[10px] text-red-500 mt-1">{formErrors.fields}</p>}
             </div>
+
+            {formTempFields.length > 0 && (
+              <div>
+                <label className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] block mb-1.5">Datos de ejemplo</label>
+                <div className="space-y-1.5">
+                  {formSampleData.map((row, ri) => (
+                    <div key={ri} className="flex items-center gap-1.5 bg-zinc-50 rounded-lg px-2 py-1.5">
+                      {formTempFields.map((f) => (
+                        <input
+                          key={f.name}
+                          value={row[f.name] ?? ''}
+                          onChange={(e) => updateSampleRow(ri, f.name, e.target.value)}
+                          placeholder={f.name}
+                          className="flex-1 min-w-0 bg-white border border-zinc-200/60 rounded-md px-2 py-1 text-[10px] font-mono text-zinc-700 outline-none focus:border-zinc-300 transition-all placeholder-zinc-300"
+                        />
+                      ))}
+                      <button
+                        onClick={() => removeSampleRow(ri)}
+                        className="shrink-0 w-5 h-5 flex items-center justify-center rounded text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={addSampleRow}
+                    className="flex items-center gap-1 text-[10px] font-medium text-zinc-400 hover:text-zinc-600 transition-colors"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    Añadir registro
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="border-t border-zinc-100 pt-4">
               <button
@@ -1010,6 +1443,37 @@ export function MockApi({ onClose }: Props) {
               >
                 Eliminar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {inspectLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/15" onClick={() => setInspectLog(null)}>
+          <div className="bg-white rounded-xl shadow-xl shadow-black/8 w-[480px] max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-100">
+              <h3 className="text-sm font-semibold text-zinc-800">Última petición</h3>
+              <button onClick={() => setInspectLog(null)} className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <span className="text-[9px] font-semibold text-zinc-400 uppercase tracking-wider block mb-1">Método</span>
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded" style={{ backgroundColor: methodColors[inspectLog.method]?.badge ?? '#f4f4f5', color: methodColors[inspectLog.method]?.text ?? '#18181b' }}>{inspectLog.method}</span>
+              </div>
+              <div>
+                <span className="text-[9px] font-semibold text-zinc-400 uppercase tracking-wider block mb-1">Path</span>
+                <code className="text-xs font-mono text-zinc-600 bg-zinc-50 rounded-lg px-2 py-1 block truncate">/{inspectLog.path}</code>
+              </div>
+              {inspectLog.body && (
+                <div>
+                  <span className="text-[9px] font-semibold text-zinc-400 uppercase tracking-wider block mb-1">Body</span>
+                  <pre className="text-[10px] font-mono text-zinc-600 bg-zinc-50 rounded-lg p-2.5 whitespace-pre-wrap max-h-40 overflow-y-auto">{inspectLog.body}</pre>
+                </div>
+              )}
             </div>
           </div>
         </div>

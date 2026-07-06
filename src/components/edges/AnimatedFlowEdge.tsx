@@ -32,39 +32,33 @@ function AnimatedFlowEdge({
 
   return (
     <>
-      {/* Hit area */}
       <path d={edgePath} fill="none" stroke="transparent" strokeWidth={20} />
 
-      {/* Gradient path */}
       <path
         d={edgePath}
         fill="none"
         stroke="url(#flow-gradient)"
-        strokeWidth={2.5}
+        strokeWidth={2}
         className="animated-flow-edge"
-        style={{ filter: selected ? 'drop-shadow(0 0 6px rgba(16,185,129,0.4))' : undefined }}
+        style={{ filter: selected ? 'drop-shadow(0 0 4px rgba(16,185,129,0.35))' : undefined }}
       />
 
-      {/* Dashed flow overlay */}
       <path
         d={edgePath}
         fill="none"
-        stroke="rgba(255,255,255,0.6)"
-        strokeWidth={1.5}
-        strokeDasharray="4 8"
+        stroke="rgba(255,255,255,0.4)"
+        strokeWidth={1}
+        strokeDasharray="3 6"
         className="animated-flow-dash"
       />
 
-      {/* Gradient def */}
       <defs>
         <linearGradient id="flow-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#34d399" />
-          <stop offset="50%" stopColor="#10b981" />
           <stop offset="100%" stopColor="#059669" />
         </linearGradient>
       </defs>
 
-      {/* Delete button on selection */}
       {selected && (
         <EdgeLabelRenderer>
           <div
@@ -76,10 +70,9 @@ function AnimatedFlowEdge({
           >
             <button
               onClick={handleDelete}
-              className="w-5 h-5 flex items-center justify-center rounded-full bg-zinc-800 text-white
-                         text-[10px] shadow-lg hover:bg-red-500 transition-colors"
+              className="w-5 h-5 flex items-center justify-center rounded-full bg-zinc-700 text-white text-[10px] shadow-md hover:bg-red-500 transition-colors"
             >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
