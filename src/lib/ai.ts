@@ -87,7 +87,7 @@ function pickMethods(desc: string): string[] {
   const methods: string[] = []
   if (has('get') || has('obtener') || has('listar')) methods.push('GET')
   if (has('post') || has('crear') || has('nuev')) methods.push('POST')
-  if (has('put') || has('update') || has('actualizar') || has('modificar')) methods.push('UPDATE')
+  if (has('put') || has('update') || has('actualizar') || has('modificar')) methods.push('PUT')
   if (has('delete') || has('eliminar') || has('borrar')) methods.push('DELETE')
   if (methods.length === 0) methods.push('GET', 'POST')
   return methods
@@ -122,10 +122,7 @@ function templateMockApi(description: string) {
 }
 
 function templateFlow(description: string) {
-  const lower = description.toLowerCase()
-  const baseUrl = lower.includes('jsonplaceholder')
-    ? 'https://jsonplaceholder.typicode.com'
-    : 'https://jsonplaceholder.typicode.com'
+  const baseUrl = 'https://jsonplaceholder.typicode.com'
   const entity = detectEntity(description)
   const entityPlural = `${entity}s`.toLowerCase()
 
@@ -232,7 +229,7 @@ export async function generateMockApi(description: string): Promise<{
     const prompt =
       `Genera una configuración de API mock en JSON válido.\nDescripción: ${description}\n\n` +
       `Formato exacto (solo JSON):\n{\n  "name": "...",\n  "path": "/...",\n  "methods": ["GET"],\n  "fields": [{"name": "...", "type": "string"}],\n  "body": "{...}"\n}\n\n` +
-      `Tipos: string, int, bool. Reglas: name corto, path empieza con /, methods GET/POST/DELETE/UPDATE, fields mínimo 1, body JSON ejemplo.\n\nGenera el JSON:`
+      `Tipos: string, int, bool. Reglas: name corto, path empieza con /, methods GET/POST/PUT/PATCH/DELETE/UPDATE, fields mínimo 1, body JSON ejemplo.\n\nGenera el JSON:`
 
     const raw = await callExternalAPI(prompt)
     if (raw) {

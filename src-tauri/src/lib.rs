@@ -70,7 +70,8 @@ async fn make_request(input: RequestInput) -> Result<ResponseOutput, AppError> {
         format!("http://{}", input.url)
     };
 
-    let method = reqwest::Method::from_bytes(input.method.as_bytes())
+    let method_str = if input.method.eq_ignore_ascii_case("UPDATE") { "PUT" } else { &input.method };
+    let method = reqwest::Method::from_bytes(method_str.as_bytes())
         .map_err(|_| AppError::InvalidMethod(input.method.clone()))?;
 
     let mut req = client.request(method, &url);

@@ -9,6 +9,8 @@ type MethodNodeType = Node<Partial<NodeDataMethod>>
 const methodStyles: Record<HttpMethod, { dot: string; from: string; to: string }> = {
   GET:    { dot: '#10b981', from: '#34d399', to: '#059669' },
   POST:   { dot: '#3b82f6', from: '#60a5fa', to: '#2563eb' },
+  PUT:    { dot: '#f97316', from: '#fb923c', to: '#ea580c' },
+  PATCH:  { dot: '#8b5cf6', from: '#a78bfa', to: '#7c3aed' },
   DELETE: { dot: '#ef4444', from: '#f87171', to: '#dc2626' },
   UPDATE: { dot: '#f59e0b', from: '#fbbf24', to: '#d97706' },
 }

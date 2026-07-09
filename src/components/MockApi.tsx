@@ -134,7 +134,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
         }))
         setMockApis(items)
         localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-      }).catch(() => {})
+      }).catch((err) => console.error('[greq] load mock apis:', err))
     }
   }, [user])
   const [tabs, setTabs] = useState<Tab[]>([])
@@ -188,7 +188,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
           port: api.port,
           isRunning: api.running,
           serverId: api.serverId,
-        }).catch(() => {})
+        }).catch((err) => console.error('[greq] save mock api batch:', err))
       }
     }
   }, [mockApis, user])
@@ -451,7 +451,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
     setMockApis((a) => a.filter((x) => x.id !== api.id))
     setTabs((t) => t.map((tab) => (tab.apiId === api.id ? { ...tab, apiId: null } : tab)))
     if (user) {
-      deleteMockApi(user.$id, api.id).catch(() => {})
+      deleteMockApi(user.$id, api.id).catch((err) => console.error('[greq] delete mock api:', err))
     }
     setDeleteTarget(null)
   }

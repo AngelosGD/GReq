@@ -40,7 +40,7 @@ const initialNodes: Node[] = []
 const initialEdges: Edge[] = []
 
 const methodMap: Record<string, HttpMethod> = {
-  get: 'GET', post: 'POST', update: 'UPDATE', delete: 'DELETE',
+  get: 'GET', post: 'POST', put: 'PUT', patch: 'PATCH', delete: 'DELETE', update: 'UPDATE',
 }
 
 export function MainApp() {
@@ -59,7 +59,6 @@ export function MainApp() {
   const [showGithubImport, setShowGithubImport] = useState(false)
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
-  const gearRef = useRef<HTMLDivElement>(null)
   const takeSnapshot = useFlowStore((s) => s.takeSnapshot)
   const { undo, redo, canUndo, canRedo } = useUndoRedo()
   const setNodeData = useCallback((id: string, data: Record<string, unknown>) => {
@@ -86,7 +85,7 @@ export function MainApp() {
         else existing.unshift(entry)
         localStorage.setItem('greq-history', JSON.stringify(existing.slice(0, 20)))
         if (user) {
-          saveHistoryEntry(user.$id, entry).catch(() => {})
+          saveHistoryEntry(user.$id, entry).catch((err) => console.error('[greq] save history:', err))
         }
       }
     }
@@ -332,7 +331,7 @@ export function MainApp() {
       else existing.unshift(entry)
       localStorage.setItem('greq-history', JSON.stringify(existing.slice(0, 20)))
       if (user) {
-        saveHistoryEntry(user.$id, entry).catch(() => {})
+        saveHistoryEntry(user.$id, entry).catch((err) => console.error('[greq] save history:', err))
       }
     }
   }, [nodes, edges, user])
@@ -467,7 +466,7 @@ export function MainApp() {
           <AuthGuard label="Inicia sesión para buscar grupos guardados">
             <NodeSearch nodes={nodes} edges={edges} />
           </AuthGuard>
-          <div className="relative group" ref={gearRef}>
+          <div className="relative group">
             <button
               onClick={goToSettings}
               className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 active:scale-95 transition-all"
@@ -612,6 +611,8 @@ export function MainApp() {
                   <NodeCard type="url" onAdd={addNodeToCanvas} />
                   <NodeCard type="get" onAdd={addNodeToCanvas} />
                   <NodeCard type="post" onAdd={addNodeToCanvas} />
+                  <NodeCard type="put" onAdd={addNodeToCanvas} />
+                  <NodeCard type="patch" onAdd={addNodeToCanvas} />
                   <NodeCard type="delete" onAdd={addNodeToCanvas} />
                   <NodeCard type="update" onAdd={addNodeToCanvas} />
                 </div>

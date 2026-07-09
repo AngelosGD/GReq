@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Node } from '@xyflow/react'
 import { KeyValueEditor } from './KeyValueEditor'
 
@@ -6,6 +6,8 @@ export function UrlConfig({ node, setNodeData }: { node: Node; setNodeData: (id:
   const d = (node.data as Record<string, unknown>) ?? {}
   const [url, setUrl] = useState((d.url as string) ?? '')
   const [groupTitle, setGroupTitle] = useState((d.title as string) ?? '')
+  useEffect(() => { setUrl((d.url as string) ?? '') }, [d.url])
+  useEffect(() => { setGroupTitle((d.title as string) ?? '') }, [d.title])
 
   return (
     <div className="space-y-4">

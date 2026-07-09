@@ -21,7 +21,7 @@ export function App() {
       }
       setCheckingSession(false)
     })
-    registerCloseHandler().catch(() => {})
+    registerCloseHandler().catch((err) => console.error('[greq] close handler:', err))
   }, [])
 
   if (checkingSession) {

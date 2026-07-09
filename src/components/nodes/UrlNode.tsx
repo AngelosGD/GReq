@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo, useState, useEffect } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import type { Node } from '@xyflow/react'
 import type { NodeDataUrl } from '../../types'
@@ -9,6 +9,7 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
   const { updateNodeData } = useReactFlow()
   const [url, setUrl] = useState(data.url ?? '')
   const [focused, setFocused] = useState(false)
+  useEffect(() => { setUrl(data.url ?? '') }, [data.url])
 
   return (
     <div

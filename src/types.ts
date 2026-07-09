@@ -18,7 +18,7 @@ export interface KeyValuePair {
   value: string
 }
 
-export type HttpMethod = 'GET' | 'POST' | 'DELETE' | 'UPDATE'
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'UPDATE'
 export type BodyType = 'json' | 'text' | 'form'
 export type AuthType = 'None' | 'Basic' | 'Bearer'
 
