@@ -22,7 +22,7 @@ No lint/test/format/codegen scripts. `noUnusedLocals` + `noUnusedParameters` in 
 ## Node Data & Execution
 - **URL node data**: `{ url, title, params:[], headers:[] }` — sidecar data, no request sent.
 - **Method node data**: `{ method, headers, body, bodyType, auth, authValue, repeatCount }` (default 1). Runs the actual HTTP request.
-- **Sidebar drag keys** (HTML5 native drag): `'url'`, `'get'`, `'post'`, `'put'`, `'patch'`, `'delete'`, `'update'`.
+- **Sidebar drag keys** (HTML5 native Drag API, see `NodeCard.tsx`): `'url'`, `'get'`, `'post'`, `'put'`, `'patch'`, `'delete'`, `'update'`.
 - **Execution**: walks edges backward through URL nodes for `$prev` resolution. `repeatCount` runs N times (all responses stored in `responses[]`). Connections: URL(source) → Method(target); Method(source) → Method(target) for chaining.
 - **Save/Load**: `{ nodes, edges }` JSON download / file input `accept=".json"`.
 - **Method colors** (`src/constants.ts`): GET=green, POST=blue, PUT=orange, PATCH=purple, DELETE=red, UPDATE=yellow.
