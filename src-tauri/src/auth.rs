@@ -297,3 +297,118 @@ pub async fn login_with_github(
 
     Ok(OAuthUserInfo { email, name })
 }
+
+#[tauri::command]
+pub async fn login_with_google(
+    client_id: String,
+    client_secret: String,
+) -> Result<OAuthUserInfo, AppError> {
+    let state = random_state(16);
+    let port: u16 = 14211;
+
+    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port))
+        .await
+        .map_err(|e| AppError::Server(format!("No se pudo iniciar servidor: {}", e)))?;
+
+    let (code_tx, code_rx) = tokio::sync::oneshot::channel::<String>();
+    let code_tx = Arc::new(tokio::sync::Mutex::new(Some(code_tx)));
+    let expected_state = state.clone();
+
+    let app = Router::new().route(
+        "/callback",
+        get(move |Query(params): Query<HashMap<String, String>>| {
+            let code_tx = code_tx.clone();
+            let expected_state = expected_state.clone();
+            async move {
+                let received_state = params.get("state").cloned().unwrap_or_default();
+                if received_state != expected_state {
+                    return (StatusCode::BAD_REQUEST, "State inválido").into_response();
+                }
+                if let Some(code) = params.get("code") {
+                    if let Some(tx) = code_tx.lock().await.take() {
+                        let _ = tx.send(code.clone());
+                    }
+                }
+                (StatusCode::OK, Html(r#"<html><body style='display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;background:#fafafa'><div style='text-align:center'><h2 style='color:#18181b;margin-bottom:8px'>✅ Sesión iniciada</h2><p style='color:#71717a'>Ya puedes cerrar esta ventana y volver a GReq</p></div></body></html>"#)).into_response()
+            }
+        }),
+    );
+
+    let server_handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.ok();
+    });
+
+    let redirect_uri = format!("http://127.0.0.1:{}/callback", port);
+    let mut oauth_url = url::Url::parse("https://accounts.google.com/o/oauth2/v2/auth")
+        .map_err(|e| AppError::Server(format!("Error al construir URL: {}", e)))?;
+    oauth_url.query_pairs_mut()
+        .append_pair("client_id", &client_id)
+        .append_pair("redirect_uri", &redirect_uri)
+        .append_pair("response_type", "code")
+        .append_pair("scope", "openid email profile")
+        .append_pair("state", &state)
+        .append_pair("access_type", "offline");
+
+    webbrowser::open(oauth_url.as_str())
+        .map_err(|e| AppError::Server(format!("No se pudo abrir el navegador: {}", e)))?;
+
+    let code = tokio::time::timeout(Duration::from_secs(180), code_rx)
+        .await
+        .map_err(|_| AppError::NotFound("Tiempo de espera agotado para el inicio de sesión".to_string()))?
+        .map_err(|_| AppError::NotFound("Inicio de sesión cancelado".to_string()))?;
+
+    server_handle.abort();
+
+    let http = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| AppError::Network(format!("Error al crear cliente HTTP: {}", e)))?;
+
+    let token_params = [
+        ("code", &code),
+        ("client_id", &client_id),
+        ("client_secret", &client_secret),
+        ("redirect_uri", &redirect_uri),
+        ("grant_type", &"authorization_code".to_string()),
+    ];
+
+    let token_resp = http
+        .post("https://oauth2.googleapis.com/token")
+        .form(&token_params)
+        .send()
+        .await
+        .map_err(|e| AppError::Network(format!("Error al obtener token: {}", e)))?;
+
+    let token_body: serde_json::Value = token_resp.json().await
+        .map_err(|e| AppError::Network(format!("Error al parsear token: {}", e)))?;
+
+    let access_token = token_body["access_token"].as_str()
+        .ok_or_else(|| {
+            let desc = token_body.get("error_description")
+                .or_else(|| token_body.get("error"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Error desconocido");
+            AppError::Network(format!("Error de autenticación: {}", desc))
+        })?;
+
+    let user_info: serde_json::Value = http
+        .get("https://www.googleapis.com/oauth2/v2/userinfo")
+        .header("Authorization", format!("Bearer {}", access_token))
+        .send()
+        .await
+        .map_err(|e| AppError::Network(format!("Error al obtener usuario: {}", e)))?
+        .json()
+        .await
+        .map_err(|e| AppError::Network(format!("Error al parsear usuario: {}", e)))?;
+
+    let email = user_info["email"].as_str()
+        .ok_or_else(|| AppError::NotFound("No se pudo obtener el email del usuario".to_string()))?
+        .to_string();
+
+    let name = user_info["name"].as_str()
+        .or_else(|| user_info["given_name"].as_str())
+        .unwrap_or("Usuario de Google")
+        .to_string();
+
+    Ok(OAuthUserInfo { email, name })
+}

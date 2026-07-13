@@ -176,6 +176,7 @@ pub fn run() {
             auth::wait_oauth_callback,
             auth::start_oauth_webview,
             auth::login_with_github,
+            auth::login_with_google,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

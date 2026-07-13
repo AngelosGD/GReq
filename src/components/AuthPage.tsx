@@ -98,6 +98,12 @@ export function AuthPage({ onSuccess }: Props) {
           clientSecret: import.meta.env.VITE_GITHUB_CLIENT_SECRET,
         })
         await createOrLoginWithOAuth(oauthResult.email, oauthResult.name)
+      } else if (provider === OAuthProvider.Google) {
+        const oauthResult = await invoke<{ email: string; name: string }>('login_with_google', {
+          clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+          clientSecret: import.meta.env.VITE_GOOGLE_CLIENT_SECRET,
+        })
+        await createOrLoginWithOAuth(oauthResult.email, oauthResult.name)
       } else {
         const url = await getOAuthUrl(provider, 0)
         const { userId, secret } = await invoke<{ userId: string; secret: string }>('start_oauth_webview', { url })
