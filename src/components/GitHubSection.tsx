@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { importFromGithub, type GitHubEndpoint } from '../lib/github'
 
@@ -31,9 +31,8 @@ const methodColors: Record<string, { text: string; bg: string; border: string }>
   UPDATE: { text: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-200' },
 }
 
-function getGroup(path: string): string {
-  const parts = path.split('/').filter(Boolean)
-  return parts[0] || 'General'
+function extractPathParams(path: string): string[] {
+  return (path.match(/\{(\w+)\}/g) || []).map((m) => m.slice(1, -1))
 }
 
 const TOKEN_KEY = 'greq-github-token'
@@ -103,6 +102,7 @@ export function GitHubSection({ onClose, onImport }: Props) {
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(
     initialSelected ? new Set([initialSelected]) : new Set()
   )
+  const [selectedEndpointForDetail, setSelectedEndpointForDetail] = useState<GitHubEndpoint | null>(null)
 
   // Manual URL add
   const [showAddForm, setShowAddForm] = useState(false)
@@ -118,17 +118,6 @@ export function GitHubSection({ onClose, onImport }: Props) {
   const [connectError, setConnectError] = useState('')
 
   const selectedRepo = repos.find((r) => r.id === selectedRepoId) ?? null
-
-  const grouped = useMemo(() => {
-    if (!selectedRepo) return {}
-    const groups: Record<string, GitHubEndpoint[]> = {}
-    for (const ep of selectedRepo.endpoints) {
-      const g = getGroup(ep.path)
-      if (!groups[g]) groups[g] = []
-      groups[g].push(ep)
-    }
-    return groups
-  }, [selectedRepo])
 
   const epKey = (ep: GitHubEndpoint) => `${ep.method}:${ep.path}`
 
@@ -153,6 +142,7 @@ export function GitHubSection({ onClose, onImport }: Props) {
 
   const selectRepo = (id: string) => {
     setSelectedRepoId(id)
+    setSelectedEndpointForDetail(null)
     const repo = repos.find((r) => r.id === id)
     if (repo) setSelectedEndpoints(new Set(repo.endpoints.map(epKey)))
   }
@@ -167,23 +157,11 @@ export function GitHubSection({ onClose, onImport }: Props) {
     })
   }
 
-  const selectAll = () => {
-    if (!selectedRepo) return
-    setSelectedEndpoints(new Set(selectedRepo.endpoints.map(epKey)))
-  }
-
-  const deselectAll = () => setSelectedEndpoints(new Set())
-
-  const importSelected = () => {
+  const handleLlevarADiagrama = () => {
     if (!selectedRepo) return
     const chosen = selectedRepo.endpoints.filter((ep) => selectedEndpoints.has(epKey(ep)))
     if (chosen.length === 0) return
     onImport(chosen)
-  }
-
-  const importAll = () => {
-    if (!selectedRepo) return
-    onImport(selectedRepo.endpoints)
   }
 
   // ── Add repo by URL ──
@@ -646,11 +624,24 @@ export function GitHubSection({ onClose, onImport }: Props) {
                       ) : (
                         repo.endpoints.map((ep, i) => {
                           const c = methodColors[ep.method] ?? { text: 'text-zinc-600', bg: 'bg-zinc-100', border: 'border-zinc-200' }
+                          const isSelected = selectedEndpoints.has(epKey(ep))
+                          const isDetail = selectedEndpointForDetail?.path === ep.path && selectedEndpointForDetail?.method === ep.method
                           return (
-                            <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-zinc-50 transition-colors">
+                            <button
+                              key={i}
+                              onClick={() => { toggleEndpoint(ep); setSelectedEndpointForDetail(ep) }}
+                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-colors ${
+                                isDetail ? 'bg-zinc-100' : 'hover:bg-zinc-50'
+                              }`}
+                            >
                               <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${c.text} ${c.bg} border ${c.border}`}>{ep.method}</span>
                               <code className="text-[11px] font-mono text-zinc-600 flex-1 min-w-0 truncate">{ep.path}</code>
-                            </div>
+                              {isSelected && (
+                                <svg className="w-3.5 h-3.5 shrink-0 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </button>
                           )
                         })
                       )}
@@ -663,63 +654,212 @@ export function GitHubSection({ onClose, onImport }: Props) {
         </aside>
 
         <main className="flex-1 flex flex-col min-w-0">
-          {selectedRepo && (
+          {selectedEndpointForDetail && selectedRepo ? (
             <>
-              <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-zinc-100">
-                <div>
-                  <h2 className="text-sm font-bold text-zinc-900">Overview</h2>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
-                    {selectedRepo.endpoints.length} endpoint{selectedRepo.endpoints.length !== 1 ? 's' : ''} en {Object.keys(grouped).length} grupo{Object.keys(grouped).length !== 1 ? 's' : ''}
-                  </p>
+              <div className="px-6 pt-5 pb-4 border-b border-zinc-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className={`text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-md shrink-0 ${
+                    (methodColors[selectedEndpointForDetail.method] ?? { text: 'text-zinc-600', bg: 'bg-zinc-100', border: 'border-zinc-200' }).text
+                  } ${
+                    (methodColors[selectedEndpointForDetail.method] ?? { text: 'text-zinc-600', bg: 'bg-zinc-100', border: 'border-zinc-200' }).bg
+                  } border ${
+                    (methodColors[selectedEndpointForDetail.method] ?? { text: 'text-zinc-600', bg: 'bg-zinc-100', border: 'border-zinc-200' }).border
+                  }`}>
+                    {selectedEndpointForDetail.method}
+                  </span>
+                  <code className="text-sm font-mono font-semibold text-zinc-900">{selectedEndpointForDetail.path}</code>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-zinc-400">{selectedEndpoints.size} seleccionado{selectedEndpoints.size !== 1 ? 's' : ''}</span>
-                  <div className="w-px h-3.5 bg-zinc-200" />
-                  <button onClick={selectedEndpoints.size === selectedRepo.endpoints.length ? deselectAll : selectAll} className="text-[10px] text-zinc-400 hover:text-zinc-600 transition-colors">
-                    {selectedEndpoints.size === selectedRepo.endpoints.length ? 'Deseleccionar' : 'Seleccionar todos'}
-                  </button>
-                  <div className="w-px h-3.5 bg-zinc-200" />
-                  <button onClick={importSelected} disabled={selectedEndpoints.size === 0} className="px-3.5 py-1.5 rounded-lg text-[11px] font-semibold bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-                    Importar {selectedEndpoints.size > 0 ? `${selectedEndpoints.size}` : ''}
-                  </button>
-                  <button onClick={importAll} className="px-3.5 py-1.5 rounded-lg text-[11px] font-semibold border border-zinc-200 text-zinc-600 hover:bg-zinc-50 transition-all">
-                    Importar todo
-                  </button>
+                {selectedEndpointForDetail.summary && (
+                  <p className="text-xs text-zinc-500">{selectedEndpointForDetail.summary}</p>
+                )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div>
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">URL</label>
+                  <div className="mt-1.5 font-mono text-xs text-zinc-700 bg-zinc-50 rounded-lg px-3 py-2.5 border border-zinc-200/50 break-all">
+                    https://api.example.com{selectedEndpointForDetail.path}
+                  </div>
+                </div>
+
+                {extractPathParams(selectedEndpointForDetail.path).length > 0 && (
+                  <div>
+                    <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                      Parámetros de ruta ({extractPathParams(selectedEndpointForDetail.path).length})
+                    </label>
+                    <div className="mt-1.5 space-y-1">
+                      {extractPathParams(selectedEndpointForDetail.path).map((param) => (
+                        <div key={param} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-200/50">
+                          <code className="text-xs font-mono text-zinc-700 font-medium">{param}</code>
+                          <span className="text-[10px] text-zinc-400">string</span>
+                          <span className="text-[10px] text-zinc-400 ml-auto">requerido</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Seleccionado para importar</label>
+                  <div className="mt-1.5 flex items-center gap-2 text-xs text-zinc-600">
+                    <span className={`w-2 h-2 rounded-full ${selectedEndpoints.has(epKey(selectedEndpointForDetail)) ? 'bg-emerald-500' : 'bg-zinc-300'}`} />
+                    {selectedEndpoints.has(epKey(selectedEndpointForDetail))
+                      ? 'Este endpoint será incluido al llevar a diagrama'
+                      : 'Hacé clic en el endpoint en la barra lateral para seleccionarlo'}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-5">
-                {Object.entries(grouped).map(([group, endpoints]) => (
-                  <div key={group}>
-                    <div className="flex items-center gap-2 mb-2.5">
-                      <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0121.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
-                      </svg>
-                      <span className="text-xs font-semibold text-zinc-600 capitalize">/{group}</span>
-                      <span className="text-[9px] text-zinc-400">{endpoints.length}</span>
-                    </div>
-                    <div className="space-y-0.5">
-                      {endpoints.map((ep, i) => {
-                        const c = methodColors[ep.method] ?? { text: 'text-zinc-600', bg: 'bg-zinc-100', border: 'border-zinc-200' }
-                        const key = epKey(ep)
-                        const checked = selectedEndpoints.has(key)
-                        return (
-                          <label key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-50 cursor-pointer transition-colors border border-transparent hover:border-zinc-200/50">
-                            <input type="checkbox" checked={checked} onChange={() => toggleEndpoint(ep)} className="accent-zinc-900 w-3.5 h-3.5 shrink-0" />
-                            <code className="text-xs font-mono text-zinc-700 flex-1 min-w-0 truncate">{ep.path}</code>
-                            {ep.summary && <span className="text-[10px] text-zinc-400 truncate max-w-[200px] hidden sm:block">{ep.summary}</span>}
-                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0 ${c.text} ${c.bg} border ${c.border}`}>{ep.method}</span>
-                          </label>
-                        )
-                      })}
-                    </div>
-                  </div>
-                ))}
+              <div className="flex items-center justify-between px-6 py-3.5 border-t border-zinc-100 bg-zinc-50/30">
+                <span className="text-[11px] text-zinc-400">
+                  {selectedEndpoints.size} endpoint{selectedEndpoints.size !== 1 ? 's' : ''} seleccionado{selectedEndpoints.size !== 1 ? 's' : ''}
+                </span>
+                <button
+                  onClick={handleLlevarADiagrama}
+                  disabled={selectedEndpoints.size === 0}
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-[12px] font-semibold bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                  </svg>
+                  Llevar a diagrama
+                </button>
               </div>
             </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center max-w-xs">
+                <svg className="w-14 h-14 mx-auto mb-5 text-zinc-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                </svg>
+                <h3 className="text-sm font-semibold text-zinc-400 mb-1.5">Seleccioná un endpoint</h3>
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  Hacé clic en un endpoint de la barra lateral para ver sus detalles y luego llevarlo al diagrama.
+                </p>
+              </div>
+            </div>
           )}
         </main>
       </div>
+
+      {showConnectDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/15" onClick={() => setShowConnectDialog(false)}>
+          <div className="bg-white rounded-xl shadow-xl shadow-black/8 w-[520px] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-100">
+              <h3 className="text-sm font-semibold text-zinc-900">Conectar a GitHub</h3>
+              <button onClick={() => setShowConnectDialog(false)} className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4 flex-1 overflow-y-auto">
+              {!getGithubToken() && githubRepos.length === 0 && !fetchingRepos ? (
+                <>
+                  <p className="text-xs text-zinc-600 leading-relaxed">
+                    Vinculá tu cuenta de GitHub para ver tus repositorios. Necesitás autorizar GReq para acceder a ellos.
+                  </p>
+                  <button
+                    onClick={handleLinkGithub}
+                    disabled={linking}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {linking ? (
+                      <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-10-12-10z"/>
+                      </svg>
+                    )}
+                    {linking ? 'Vinculando...' : 'Vincular GitHub'}
+                  </button>
+                  {connectError && (
+                    <p className="text-[11px] text-red-500 mt-1.5">{connectError}</p>
+                  )}
+                </>
+              ) : fetchingRepos ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="flex flex-col items-center gap-3">
+                    <svg className="w-8 h-8 animate-spin text-zinc-300" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <span className="text-sm text-zinc-400">Cargando repositorios...</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.06em]">
+                      {githubRepos.length} repositorio{githubRepos.length !== 1 ? 's' : ''}
+                    </span>
+                    <button
+                      onClick={toggleSelectAllGh}
+                      className="text-[10px] text-zinc-400 hover:text-zinc-600 transition-colors"
+                    >
+                      {githubRepos.length === selectedGithubRepos.size ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                    </button>
+                  </div>
+                  <div className="space-y-1 max-h-64 overflow-y-auto border border-zinc-200/50 rounded-lg bg-white p-1.5">
+                    {githubRepos.map((repo) => (
+                      <label
+                        key={repo.fullName}
+                        className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-zinc-50 cursor-pointer transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedGithubRepos.has(repo.fullName)}
+                          onChange={() => toggleGhRepo(repo.fullName)}
+                          className="accent-zinc-900 w-3.5 h-3.5"
+                        />
+                        <svg className="w-4 h-4 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-10-12-10z"/>
+                        </svg>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-medium text-zinc-700 truncate block">{repo.fullName}</span>
+                          {repo.description && (
+                            <span className="text-[10px] text-zinc-400 truncate block">{repo.description}</span>
+                          )}
+                        </div>
+                        {repo.private && (
+                          <span className="text-[8px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200 shrink-0">
+                            Privado
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {githubRepos.length > 0 && (
+              <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-zinc-100">
+                <button onClick={() => setShowConnectDialog(false)} className="px-3.5 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 hover:bg-zinc-100 transition-colors">
+                  Cancelar
+                </button>
+                <button
+                  onClick={importSelectedGithubRepos}
+                  disabled={selectedGithubRepos.size === 0 || fetchingRepos}
+                  className="px-3.5 py-1.5 rounded-lg text-[11px] font-semibold bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+                >
+                  {fetchingRepos && (
+                    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  )}
+                  Importar {selectedGithubRepos.size} repositorio{selectedGithubRepos.size !== 1 ? 's' : ''}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
