@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { importFromGithub, type GitHubEndpoint } from '../lib/github'
 
@@ -60,12 +60,49 @@ async function fetchMyRepos(token: string): Promise<GitHubRepo[]> {
   }))
 }
 
-let repoCounter = 0
+const REPOS_KEY = 'greq-github-repos'
+const SELECTED_KEY = 'greq-github-selected-repo'
+
+function loadRepos(): RepoInfo[] {
+  try {
+    const raw = localStorage.getItem(REPOS_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) return parsed as RepoInfo[]
+  } catch {
+    /* ignore */
+  }
+  return []
+}
+
+function saveRepos(list: RepoInfo[]) {
+  try {
+    localStorage.setItem(REPOS_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
+function genRepoId(): string {
+  return `repo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+}
 
 export function GitHubSection({ onClose, onImport }: Props) {
-  const [repos, setRepos] = useState<RepoInfo[]>([])
-  const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null)
-  const [selectedEndpoints, setSelectedEndpoints] = useState<Set<string>>(new Set())
+  const initialRepos = loadRepos()
+  const initialSelected = (() => {
+    const sel = localStorage.getItem(SELECTED_KEY)
+    if (sel && initialRepos.some((r) => r.id === sel)) return sel
+    return initialRepos[0]?.id ?? null
+  })()
+  const [repos, setRepos] = useState<RepoInfo[]>(initialRepos)
+  const [selectedRepoId, setSelectedRepoId] = useState<string | null>(initialSelected)
+  const [selectedEndpoints, setSelectedEndpoints] = useState<Set<string>>(() => {
+    const repo = initialRepos.find((r) => r.id === initialSelected) ?? initialRepos[0]
+    return repo ? new Set(repo.endpoints.map((e) => `${e.method}:${e.path}`)) : new Set()
+  })
+  const [expandedRepos, setExpandedRepos] = useState<Set<string>>(
+    initialSelected ? new Set([initialSelected]) : new Set()
+  )
 
   // Manual URL add
   const [showAddForm, setShowAddForm] = useState(false)
@@ -94,6 +131,31 @@ export function GitHubSection({ onClose, onImport }: Props) {
   }, [selectedRepo])
 
   const epKey = (ep: GitHubEndpoint) => `${ep.method}:${ep.path}`
+
+  // Persist imported repos and current selection across sessions
+  useEffect(() => {
+    saveRepos(repos)
+  }, [repos])
+
+  useEffect(() => {
+    if (selectedRepoId) localStorage.setItem(SELECTED_KEY, selectedRepoId)
+    else localStorage.removeItem(SELECTED_KEY)
+  }, [selectedRepoId])
+
+  const toggleExpand = (id: string) => {
+    setExpandedRepos((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectRepo = (id: string) => {
+    setSelectedRepoId(id)
+    const repo = repos.find((r) => r.id === id)
+    if (repo) setSelectedEndpoints(new Set(repo.endpoints.map(epKey)))
+  }
 
   const toggleEndpoint = (ep: GitHubEndpoint) => {
     const key = epKey(ep)
@@ -130,7 +192,7 @@ export function GitHubSection({ onClose, onImport }: Props) {
     setLoading(true)
     try {
       const result = await importFromGithub(url)
-      const id = `repo-${++repoCounter}`
+      const id = genRepoId()
       const newRepo: RepoInfo = { id, name: result.title, url: url.trim(), endpoints: result.endpoints }
       setRepos((prev) => [...prev, newRepo])
       setSelectedRepoId(id)
@@ -145,11 +207,18 @@ export function GitHubSection({ onClose, onImport }: Props) {
   }
 
   const removeRepo = (id: string) => {
-    setRepos((prev) => {
-      const next = prev.filter((r) => r.id !== id)
-      if (selectedRepoId === id) setSelectedRepoId(next[0]?.id ?? null)
-      return next
+    const next = repos.filter((r) => r.id !== id)
+    setRepos(next)
+    setExpandedRepos((prev) => {
+      const n = new Set(prev)
+      n.delete(id)
+      return n
     })
+    if (selectedRepoId === id) {
+      const fallback = next[0]?.id ?? null
+      setSelectedRepoId(fallback)
+      setSelectedEndpoints(fallback ? new Set(next[0].endpoints.map(epKey)) : new Set())
+    }
   }
 
   // ── Connect via GitHub OAuth or username ──
@@ -211,7 +280,7 @@ export function GitHubSection({ onClose, onImport }: Props) {
     for (const ghRepo of selected) {
       try {
         const result = await importFromGithub(ghRepo.url)
-        const id = `repo-${++repoCounter}`
+        const id = genRepoId()
         newRepos.push({ id, name: result.title, url: ghRepo.url, endpoints: result.endpoints })
       } catch { /* skip failures */ }
     }
@@ -219,6 +288,7 @@ export function GitHubSection({ onClose, onImport }: Props) {
       setRepos((prev) => [...prev, ...newRepos])
       setSelectedRepoId(newRepos[0].id)
       setSelectedEndpoints(new Set(newRepos[0].endpoints.map(epKey)))
+      setExpandedRepos((prev) => new Set([...prev, ...newRepos.map((r) => r.id)]))
     }
     setFetchingRepos(false)
     setShowConnectDialog(false)
@@ -521,33 +591,74 @@ export function GitHubSection({ onClose, onImport }: Props) {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <aside className="w-56 flex-shrink-0 border-r border-zinc-200/60 bg-white flex flex-col">
-          <div className="px-4 pt-4 pb-2">
+        <aside className="w-60 flex-shrink-0 border-r border-zinc-200/60 bg-white flex flex-col">
+          <div className="px-4 pt-4 pb-2 flex items-center justify-between">
             <div className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em]">Repositorios</div>
+            <button
+              onClick={openConnectDialog}
+              title="Traer repositorios"
+              className="w-6 h-6 -mr-1 flex items-center justify-center rounded-md text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-all"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+            </button>
           </div>
           <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
-            {repos.map((repo) => (
-              <button
-                key={repo.id}
-                onClick={() => { setSelectedRepoId(repo.id); setSelectedEndpoints(new Set(repo.endpoints.map(epKey))) }}
-                className={`group w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all text-left ${
-                  selectedRepoId === repo.id ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
-                }`}
-              >
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-10-12-10z"/>
-                </svg>
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium truncate">{repo.name}</div>
-                  <div className="text-[9px] text-zinc-400 mt-0.5">{repo.endpoints.length} endpoints</div>
+            {repos.map((repo) => {
+              const expanded = expandedRepos.has(repo.id)
+              const isSelected = selectedRepoId === repo.id
+              return (
+                <div key={repo.id}>
+                  <div
+                    className={`group flex items-center gap-1.5 px-2 py-2 rounded-lg text-xs transition-all cursor-pointer ${
+                      isSelected ? 'bg-zinc-100 text-zinc-800' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
+                    }`}
+                    onClick={() => { selectRepo(repo.id); toggleExpand(repo.id) }}
+                  >
+                    <svg
+                      className={`w-3.5 h-3.5 shrink-0 text-zinc-400 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-10-12-10z"/>
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium truncate">{repo.name}</div>
+                      <div className="text-[9px] text-zinc-400 mt-0.5">{repo.endpoints.length} endpoints</div>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); removeRepo(repo.id) }}
+                      className="w-5 h-5 flex items-center justify-center rounded text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100 shrink-0"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {expanded && (
+                    <div className="ml-3.5 pl-2.5 border-l border-zinc-200/70 my-0.5 space-y-0.5">
+                      {repo.endpoints.length === 0 ? (
+                        <div className="px-2 py-1.5 text-[10px] text-zinc-400">Sin endpoints detectados</div>
+                      ) : (
+                        repo.endpoints.map((ep, i) => {
+                          const c = methodColors[ep.method] ?? { text: 'text-zinc-600', bg: 'bg-zinc-100', border: 'border-zinc-200' }
+                          return (
+                            <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-zinc-50 transition-colors">
+                              <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${c.text} ${c.bg} border ${c.border}`}>{ep.method}</span>
+                              <code className="text-[11px] font-mono text-zinc-600 flex-1 min-w-0 truncate">{ep.path}</code>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  )}
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); removeRepo(repo.id) }} className="w-5 h-5 flex items-center justify-center rounded text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </button>
-            ))}
+              )
+            })}
           </div>
         </aside>
 
