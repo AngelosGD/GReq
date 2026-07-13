@@ -93,10 +93,11 @@ export function AuthPage({ onSuccess }: Props) {
     setLoading(true)
     try {
       if (provider === OAuthProvider.Github) {
-        const oauthResult = await invoke<{ email: string; name: string }>('login_with_github', {
+        const oauthResult = await invoke<{ email: string; name: string; accessToken: string }>('login_with_github', {
           clientId: import.meta.env.VITE_GITHUB_CLIENT_ID,
           clientSecret: import.meta.env.VITE_GITHUB_CLIENT_SECRET,
         })
+        localStorage.setItem('greq-github-token', oauthResult.accessToken)
         await createOrLoginWithOAuth(oauthResult.email, oauthResult.name)
       } else if (provider === OAuthProvider.Google) {
         const oauthResult = await invoke<{ email: string; name: string }>('login_with_google', {

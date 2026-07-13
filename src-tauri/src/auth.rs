@@ -17,6 +17,7 @@ use crate::AppError;
 pub struct OAuthUserInfo {
     pub email: String,
     pub name: String,
+    pub access_token: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -295,7 +296,7 @@ pub async fn login_with_github(
         .unwrap_or("Usuario de GitHub")
         .to_string();
 
-    Ok(OAuthUserInfo { email, name })
+    Ok(OAuthUserInfo { email, name, access_token: access_token.clone() })
 }
 
 #[tauri::command]
@@ -410,5 +411,5 @@ pub async fn login_with_google(
         .unwrap_or("Usuario de Google")
         .to_string();
 
-    Ok(OAuthUserInfo { email, name })
+    Ok(OAuthUserInfo { email, name, access_token: access_token.to_string() })
 }

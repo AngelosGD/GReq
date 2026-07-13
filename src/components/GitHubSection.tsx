@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { importFromGithub, type GitHubEndpoint } from '../lib/github'
 
 interface RepoInfo {
@@ -35,9 +36,18 @@ function getGroup(path: string): string {
   return parts[0] || 'General'
 }
 
-async function fetchUserRepos(username: string): Promise<GitHubRepo[]> {
-  const res = await fetch(`https://api.github.com/users/${username}/repos?per_page=100&sort=updated`, {
-    headers: { Accept: 'application/vnd.github.v3+json' },
+const TOKEN_KEY = 'greq-github-token'
+
+function getGithubToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+async function fetchMyRepos(token: string): Promise<GitHubRepo[]> {
+  const res = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated&type=all', {
+    headers: {
+      Accept: 'application/vnd.github.v3+json',
+      Authorization: `Bearer ${token}`,
+    },
   })
   if (!res.ok) throw new Error(`GitHub API error ${res.status}`)
   const data = await res.json()
@@ -62,9 +72,9 @@ export function GitHubSection({ onClose, onImport }: Props) {
   const [url, setUrl] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // GitHub connect via username
+  // GitHub connect via OAuth
   const [showConnectDialog, setShowConnectDialog] = useState(false)
-  const [username, setUsername] = useState('')
+  const [linking, setLinking] = useState(false)
   const [fetchingRepos, setFetchingRepos] = useState(false)
   const [githubRepos, setGithubRepos] = useState<GitHubRepo[]>([])
   const [selectedGithubRepos, setSelectedGithubRepos] = useState<Set<string>>(new Set())
@@ -142,27 +152,45 @@ export function GitHubSection({ onClose, onImport }: Props) {
     })
   }
 
-  // ── Connect via GitHub username ──
-  const openConnectDialog = () => {
-    setShowConnectDialog(true)
-    setUsername('')
-    setGithubRepos([])
-    setSelectedGithubRepos(new Set())
-    setConnectError('')
-  }
-
-  const handleFetchRepos = async () => {
-    if (!username.trim()) return
+  // ── Connect via GitHub OAuth or username ──
+  const handleLinkGithub = async () => {
+    setLinking(true)
     setFetchingRepos(true)
     setConnectError('')
     try {
-      const ghRepos = await fetchUserRepos(username.trim())
-      setGithubRepos(ghRepos)
-      setSelectedGithubRepos(new Set(ghRepos.map((r) => r.fullName)))
-    } catch (e: any) {
-      setConnectError(e?.message || 'Error al obtener repositorios')
-    } finally {
+      const result = await invoke<{ email: string; name: string; accessToken: string }>('login_with_github', {
+        clientId: import.meta.env.VITE_GITHUB_CLIENT_ID,
+        clientSecret: import.meta.env.VITE_GITHUB_CLIENT_SECRET,
+      })
+      localStorage.setItem(TOKEN_KEY, result.accessToken)
+      const repos = await fetchMyRepos(result.accessToken)
+      setGithubRepos(repos)
+      setSelectedGithubRepos(new Set(repos.map((r) => r.fullName)))
       setFetchingRepos(false)
+      setLinking(false)
+    } catch (e: any) {
+      setConnectError(e?.message || 'Error al vincular GitHub')
+      setFetchingRepos(false)
+      setLinking(false)
+    }
+  }
+
+  const openConnectDialog = () => {
+    setShowConnectDialog(true)
+    setGithubRepos([])
+    setSelectedGithubRepos(new Set())
+    setConnectError('')
+    setLinking(false)
+    const token = getGithubToken()
+    if (token) {
+      setFetchingRepos(true)
+      fetchMyRepos(token)
+        .then((repos) => {
+          setGithubRepos(repos)
+          setSelectedGithubRepos(new Set(repos.map((r) => r.fullName)))
+        })
+        .catch((e) => setConnectError(e?.message || 'Error al obtener repositorios'))
+        .finally(() => setFetchingRepos(false))
     }
   }
 
@@ -195,7 +223,6 @@ export function GitHubSection({ onClose, onImport }: Props) {
     setFetchingRepos(false)
     setShowConnectDialog(false)
     setGithubRepos([])
-    setUsername('')
   }
 
   const toggleSelectAllGh = () => {
@@ -288,43 +315,43 @@ export function GitHubSection({ onClose, onImport }: Props) {
               </div>
 
               <div className="px-5 py-4 space-y-4 flex-1 overflow-y-auto">
-                <p className="text-xs text-zinc-600 leading-relaxed">
-                  Ingresa tu usuario de GitHub para listar tus repositorios públicos. Selecciona los que quieras importar.
-                </p>
-
-                <div>
-                  <label className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em] block mb-1.5">
-                    Usuario de GitHub
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder="ej: tu-usuario"
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleFetchRepos() }}
-                      className="flex-1 bg-zinc-50 border border-zinc-200/60 rounded-lg px-3 py-1.5 text-xs font-mono text-zinc-700 outline-none focus:border-zinc-300 transition-all placeholder-zinc-300"
-                      autoFocus
-                    />
+                {!getGithubToken() && githubRepos.length === 0 && !fetchingRepos ? (
+                  <>
+                    <p className="text-xs text-zinc-600 leading-relaxed">
+                      Vinculá tu cuenta de GitHub para ver tus repositorios. Necesitás autorizar GReq para acceder a ellos.
+                    </p>
                     <button
-                      onClick={handleFetchRepos}
-                      disabled={fetchingRepos || !username.trim()}
-                      className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+                      onClick={handleLinkGithub}
+                      disabled={linking}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
-                      {fetchingRepos && (
-                        <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                      {linking ? (
+                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                         </svg>
+                      ) : (
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-10-12-10z"/>
+                        </svg>
                       )}
-                      {fetchingRepos ? 'Buscando...' : 'Buscar'}
+                      {linking ? 'Vinculando...' : 'Vincular GitHub'}
                     </button>
+                    {connectError && (
+                      <p className="text-[11px] text-red-500 mt-1.5">{connectError}</p>
+                    )}
+                  </>
+                ) : fetchingRepos ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="flex flex-col items-center gap-3">
+                      <svg className="w-8 h-8 animate-spin text-zinc-300" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      <span className="text-sm text-zinc-400">Cargando repositorios...</span>
+                    </div>
                   </div>
-                  {connectError && (
-                    <p className="text-[11px] text-red-500 mt-1.5">{connectError}</p>
-                  )}
-                </div>
-
-                {githubRepos.length > 0 && (
+                ) : (
                   <>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.06em]">
