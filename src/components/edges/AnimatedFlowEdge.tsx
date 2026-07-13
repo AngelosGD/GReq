@@ -37,7 +37,7 @@ function AnimatedFlowEdge({
       <path
         d={edgePath}
         fill="none"
-        stroke="url(#flow-gradient)"
+        stroke="#10b981"
         strokeWidth={2}
         className="animated-flow-edge"
         style={{ filter: selected ? 'drop-shadow(0 0 4px rgba(16,185,129,0.35))' : undefined }}
