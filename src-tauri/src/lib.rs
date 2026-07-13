@@ -174,6 +174,8 @@ pub fn run() {
             mock::stop_all_mock_servers,
             auth::start_oauth_server,
             auth::wait_oauth_callback,
+            auth::start_oauth_webview,
+            auth::login_with_github,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

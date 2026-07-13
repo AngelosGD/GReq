@@ -14,16 +14,18 @@ export async function signInWithEmail(email: string, password: string) {
 }
 
 export async function signUpWithEmail(name: string, email: string, password: string) {
-  await account.create(ID.unique(), email, password, name)
-  // Some Appwrite configs require email verification before session creation.
-  // Try logging in; if it fails (e.g. verification required), the account is
-  // still created and the user can verify then log in manually.
+  try {
+    await account.create(ID.unique(), email, password, name)
+  } catch (e: any) {
+    if (e?.code === 409 || e?.type === 'user_already_exists' || e?.code === 400) {
+      throw new Error('Este correo ya está registrado con otra contraseña. Iniciá sesión con tu correo y contraseña.')
+    }
+    throw e
+  }
   try {
     return await account.createEmailPasswordSession(email, password)
   } catch {
-    throw new Error(
-      'Cuenta creada. Revisá tu correo para verificar la cuenta antes de iniciar sesión.',
-    )
+    throw new Error('Cuenta creada. Revisá tu correo para verificar la cuenta antes de iniciar sesión.')
   }
 }
 
@@ -51,4 +53,4 @@ export async function completeOAuth(userId: string, secret: string) {
   return account.createSession(userId, secret)
 }
 
-export { OAuthProvider } from 'appwrite'
+export { OAuthProvider, ID } from 'appwrite'

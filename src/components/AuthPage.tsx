@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { openUrl } from '@tauri-apps/plugin-opener'
 import { Logo } from './Logo'
 import {
   signInWithEmail,
@@ -9,6 +8,7 @@ import {
   completeOAuth,
   OAuthProvider,
   getCurrentUser,
+  account,
 } from '../lib/appwrite'
 import { useAuthStore } from '../store/authStore'
 
@@ -71,18 +71,43 @@ export function AuthPage({ onSuccess }: Props) {
     }
   }
 
+  function deriveOAuthPassword(email: string) {
+    const clean = email.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+    const suffix = (clean.slice(0, 10) || 'user') + 'A1'
+    return 'greq_oauth_' + suffix
+  }
+
+  async function createOrLoginWithOAuth(email: string, name: string) {
+    const pwd = deriveOAuthPassword(email)
+    const safeName = (name || '').trim() || email.split('@')[0] || 'Usuario'
+    const safeEmail = email.trim().toLowerCase()
+    try {
+      await account.createEmailPasswordSession(safeEmail, pwd)
+      return
+    } catch {}
+    await signUpWithEmail(safeName, safeEmail, pwd)
+  }
+
   async function handleOAuth(provider: OAuthProvider) {
     setError('')
     setLoading(true)
     try {
-      const port = await invoke<number>('start_oauth_server')
-      const url = await getOAuthUrl(provider, port)
-      await openUrl(url)
-      const { userId, secret } = await invoke<{ userId: string; secret: string }>('wait_oauth_callback', { port })
-      await completeOAuth(userId, secret)
+      if (provider === OAuthProvider.Github) {
+        const oauthResult = await invoke<{ email: string; name: string }>('login_with_github', {
+          clientId: import.meta.env.VITE_GITHUB_CLIENT_ID,
+          clientSecret: import.meta.env.VITE_GITHUB_CLIENT_SECRET,
+        })
+        await createOrLoginWithOAuth(oauthResult.email, oauthResult.name)
+      } else {
+        const url = await getOAuthUrl(provider, 0)
+        const { userId, secret } = await invoke<{ userId: string; secret: string }>('start_oauth_webview', { url })
+        await completeOAuth(userId, secret)
+      }
       await onLoginSuccess()
     } catch (err: any) {
-      setError(err?.message || err?.type || 'Error al iniciar sesión con el proveedor')
+      console.error('[greq] OAuth error:', err)
+      const msg = typeof err === 'string' ? err : (err?.message || err?.type || 'Error al iniciar sesión con el proveedor')
+      setError(msg)
     } finally {
       setLoading(false)
     }
