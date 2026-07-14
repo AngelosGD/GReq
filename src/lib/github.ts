@@ -16,14 +16,6 @@ function cleanGithubUrl(url: string): { owner: string; repo: string } | null {
   return { owner: m[1], repo: m[2].replace(/\.git$/, '') }
 }
 
-async function fetchJson(url: string): Promise<any> {
-  const res = await fetch(url, {
-    headers: { Accept: 'application/vnd.github.v3+json' },
-  })
-  if (!res.ok) throw new Error(`GitHub API error ${res.status}`)
-  return res.json()
-}
-
 export async function importFromGithub(repoUrl: string): Promise<GitHubImportResult> {
   const info = cleanGithubUrl(repoUrl)
   if (!info) throw new Error('URL de GitHub inválida. Ej: https://github.com/owner/repo')
@@ -50,22 +42,10 @@ export async function importFromGithub(repoUrl: string): Promise<GitHubImportRes
     } catch { /* try next */ }
   }
 
-  // If no spec found, try to list repo contents and find routes in code
   if (endpoints.length === 0) {
     try {
-      const contents = await fetchJson(`https://api.github.com/repos/${owner}/${repo}/contents`)
-      endpoints = await guessRoutes(contents, owner, repo)
+      endpoints = await guessRoutes(owner, repo)
     } catch { /* use fallback */ }
-  }
-
-  // Fallback: generate common REST endpoints based on repo name
-  if (endpoints.length === 0) {
-    const resource = repo.replace(/[-_]/g, ' ').toLowerCase().includes('api') ? repo : `${repo}/api`
-    endpoints = [
-      { method: 'GET', path: `/${resource}`, summary: `List ${repo}` },
-      { method: 'GET', path: `/${resource}/{id}`, summary: `Get ${repo} by ID` },
-      { method: 'POST', path: `/${resource}`, summary: `Create ${repo}` },
-    ]
   }
 
   return {
@@ -133,25 +113,148 @@ function simpleYamlParse(text: string): any {
   return result
 }
 
-async function guessRoutes(contents: any[], owner: string, repo: string): Promise<GitHubEndpoint[]> {
-  const dirs = contents.filter((c: any) => c.type === 'dir')
-  const endpoints: GitHubEndpoint[] = []
+const CODE_EXTS = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'py', 'rs', 'go', 'java', 'kt'])
 
-  for (const dir of dirs.slice(0, 5)) {
+const MAX_FILES = 30
+
+function authHeaders(): Record<string, string> {
+  const h: Record<string, string> = { Accept: 'application/vnd.github.v3+json' }
+  try {
+    const token = localStorage.getItem('greq-github-token')
+    if (token) h['Authorization'] = `Bearer ${token}`
+  } catch { /* not in browser */ }
+  return h
+}
+
+function patternsForExt(ext: string): [RegExp, (m: string) => string][] {
+  const up = (m: string) => m.toUpperCase()
+
+  if (ext === 'py') {
+    return [
+      [/@\w+\.(get|post|put|patch|delete)\s*\(\s*['"](\/[^'"]*)['"]/gi, up],
+      [/@\w+\.route\s*\(\s*['"](\/[^'"]*)['"]/gi, () => 'GET'],
+    ]
+  }
+
+  if (ext === 'rs') {
+    return [
+      [/#\[(get|post|put|patch|delete)\s*\(\s*['"](\/[^'"]*)['"]\s*\)\]/gi, up],
+    ]
+  }
+
+  if (ext === 'go') {
+    return [
+      [/\.(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s*\(\s*['"`](\/[^'"`]*)['"`]/gi, (m: string) => m],
+    ]
+  }
+
+  if (['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs'].includes(ext)) {
+    return [
+      [/\.(get|post|put|patch|delete|head|options)\s*\(\s*['"`](\/[^'"`]*)['"`]/gi, up],
+    ]
+  }
+
+  return []
+}
+
+function extractRoutesFromContent(content: string, ext: string): { method: string; path: string }[] {
+  const seen = new Set<string>()
+  const results: { method: string; path: string }[] = []
+
+  for (const [pattern, norm] of patternsForExt(ext)) {
+    const regex = new RegExp(pattern.source, 'gi')
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(content)) !== null) {
+      let method = norm(match[1] ?? 'GET')
+      let path = match[match.length - 1].replace(/:\w+/g, (m) => `{${m.slice(1)}}`)
+      if (!path || path === '/') continue
+      const key = `${method}:${path}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        results.push({ method, path })
+      }
+    }
+  }
+
+  return results
+}
+
+function routeFileScore(path: string): number {
+  const name = path.split('/').pop() ?? path
+  if (/\/?(routes|api|controllers?|handlers?|endpoints)\b/i.test(path)) return 3
+  if (/\b(server|app|main|router)\b/i.test(name)) return 2
+  if (/\.(routes?|controller|handler|endpoint)\.\w+$/.test(name)) return 3
+  if (/\bapi\b/i.test(name)) return 2
+  return 1
+}
+
+async function guessRoutes(owner: string, repo: string): Promise<GitHubEndpoint[]> {
+  const endpoints: GitHubEndpoint[] = []
+  const seen = new Set<string>()
+  let count = 0
+  let activeBranch = ''
+
+  const tree = await (async () => {
+    for (const branch of ['main', 'master']) {
+      try {
+        const res = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
+          { headers: authHeaders() },
+        )
+        if (res.ok) {
+          const json = await res.json()
+          activeBranch = branch
+          console.log(`[guessRoutes] tree OK, branch=${branch}, blobs=${json.tree?.filter((t: any) => t.type==='blob').length ?? 0}`)
+          return json.tree ?? []
+        }
+      } catch { /* try next */ }
+    }
+    console.log(`[guessRoutes] tree FAILED for both main/master`)
+    return []
+  })()
+
+  if (!activeBranch) {
+    console.log(`[guessRoutes] no active branch, aborting`)
+    return endpoints
+  }
+
+  const codeFiles = tree.filter((item: any) => {
+    if (item.type !== 'blob') return false
+    if (item.path?.includes('node_modules')) return false
+    if (item.path?.includes('.git/')) return false
+    const ext = (item.path ?? '').split('.').pop()?.toLowerCase()
+    return !!ext && CODE_EXTS.has(ext)
+  })
+
+  console.log(`[guessRoutes] code files found: ${codeFiles.length}`)
+
+  codeFiles.sort((a: any, b: any) => routeFileScore(b.path) - routeFileScore(a.path))
+
+  if (codeFiles.length > 0) {
+    console.log(`[guessRoutes] top files:`, codeFiles.slice(0, 5).map((f: any) => `${f.path} (score=${routeFileScore(f.path)})`))
+  }
+
+  for (const item of codeFiles) {
+    if (count >= MAX_FILES) break
+    count++
     try {
-      const files = await fetchJson(`https://api.github.com/repos/${owner}/${repo}/contents/${dir.name}`)
-      for (const file of files) {
-        const match = file.name?.match(/\.(routes|controller|handler|api)\.(ts|js|py|rs)$/i)
-        if (match) {
-          endpoints.push({
-            method: 'GET',
-            path: `/api/${dir.name}`,
-            summary: `Endpoints in ${dir.name}`,
-          })
+      const res = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${activeBranch}/${item.path}`)
+      if (!res.ok) continue
+      const ext = (item.path ?? '').split('.').pop()?.toLowerCase()
+      const routes = extractRoutesFromContent(await res.text(), ext ?? '')
+      if (routes.length > 0) {
+        console.log(`[guessRoutes] found ${routes.length} routes in ${item.path}:`, JSON.stringify(routes))
+      }
+      for (const { method, path } of routes) {
+        const key = `${method}:${path}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          endpoints.push({ method, path, summary: `${method} ${path}` })
         }
       }
     } catch { /* skip */ }
   }
 
+  console.log(`[guessRoutes] total endpoints found: ${endpoints.length}, files scanned: ${count}`)
   return endpoints
 }
