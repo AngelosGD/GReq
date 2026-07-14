@@ -61,10 +61,10 @@ function AnimatedFlowEdge({
               pointerEvents: 'all',
             }}
           >
-            <button
-              onClick={handleDelete}
-              className="w-5 h-5 flex items-center justify-center rounded-full bg-zinc-700 text-white text-[10px] shadow-md hover:bg-red-500 transition-colors"
-            >
+              <button
+                onClick={handleDelete}
+                className="w-5 h-5 flex items-center justify-center rounded-full bg-zinc-800/70 backdrop-blur-sm text-white text-[10px] shadow-tinted-md hover:bg-red-500/90 hover:scale-110 transition-all duration-150"
+              >
               <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>

@@ -20,7 +20,7 @@ export function UrlConfig({ node, setNodeData }: { node: Node; setNodeData: (id:
             setNodeData(node.id, { title: e.target.value })
           }}
           placeholder="e.g. Obtener usuario"
-          className="w-full bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-2 text-xs font-medium text-zinc-700 placeholder:text-zinc-400 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/15 transition-all"
+          className="w-full bg-zinc-50 border border-zinc-200/70 rounded-lg px-3 py-2 text-xs font-medium text-zinc-700 placeholder:text-zinc-400 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all"
         />
       </div>
 
@@ -33,7 +33,7 @@ export function UrlConfig({ node, setNodeData }: { node: Node; setNodeData: (id:
             setNodeData(node.id, { url: e.target.value })
           }}
           placeholder="https://api.ejemplo.com"
-          className="w-full bg-zinc-50 border border-zinc-200/80 rounded-lg px-3 py-2 text-xs font-mono text-zinc-700 placeholder:text-zinc-400 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/15 transition-all"
+          className="w-full bg-zinc-50 border border-zinc-200/70 rounded-lg px-3 py-2 text-xs font-mono text-zinc-700 placeholder:text-zinc-400 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all"
         />
       </div>
 

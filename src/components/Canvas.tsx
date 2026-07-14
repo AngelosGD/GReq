@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react'
 import {
   ReactFlow,
   Background,
+  BackgroundVariant,
   useReactFlow,
   type Node,
   type Edge,
@@ -88,13 +89,7 @@ export function Canvas({
       fitView
       style={{ width: '100%', height: '100%' }}
     >
-      <Background />
-      <defs>
-        <linearGradient id="flow-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#34d399" />
-          <stop offset="100%" stopColor="#059669" />
-        </linearGradient>
-      </defs>
+      <Background variant={BackgroundVariant.Dots} color="#a1a1aa" gap={20} size={1.5} />
     </ReactFlow>
   )
 }

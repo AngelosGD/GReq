@@ -20,15 +20,17 @@ npm run tauri dev
 npm run tauri build
 ```
 
-## Features
+## Características
 
-- **Peticiones HTTP** — Nodos URL + Method (GET/POST/DELETE/UPDATE) arrastrables al canvas, ejecución en cadena con `repeatCount`
+- **Editor visual de flujos** — Nodos URL + Method (GET/POST/PUT/PATCH/DELETE/UPDATE) arrastrables al canvas, ejecución en cadena con `repeatCount`
 - **Variables dinámicas** — `{{$prev.body.path}}`, `{{$prev.headers.X}}`, `{{$prev.status}}`, `{{nodeId.body.path}}`
-- **Agrupación** — Nodos URL con nombre + métodos conectados, guardados en historial (`greq-history`, 20)
-- **Historial** — Modal con grupos guardados, retomar o eliminar
-- **Servidor Mock inteligente** — Panel de APIs de prueba con servidor Rust/axum. Crea APIs con campos tipados y datos de ejemplo; el backend responde según el método (GET lista/individual, POST crea con ID, DELETE/PUT/PATCH actualizan), status y body editables
-- **Sample data multi-registro** — Editor tabular de registros de ejemplo que el mock sirve en GET
-- **Onboarding** — 3 slides con video e imágenes
-- **Undo/redo** — 50 snapshots, Ctrl+Z / Ctrl+Shift+Z
+- **Historial** — Grupos guardados automáticamente al nombrar un nodo URL, retomar o eliminar desde modal
+- **Autenticación** — Email/password (Appwrite) y OAuth directo por navegador (GitHub, Google)
+- **Importación desde GitHub** — Sidebar con repositorios importados, detección de endpoints, árbol expandible, panel de detalle + botón "Llevar a diagrama"
+- **Servidor Mock inteligente** — APIs de prueba con Rust/axum. Crea APIs con campos tipados y datos de ejemplo. GET lista/individual, POST crea con ID, DELETE/PUT/PATCH actualizan. Status, body y headers editables por método
+- **Asistente IA** — Chat lateral que genera flujos completos de API desde descripción en lenguaje natural
+- **Undo/redo** — 50 snapshots, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
 - **Guardar/cargar** — Flujos completos en JSON
-- **Búsqueda de grupos** — `NodeSearch` para encontrar nodos URL por título
+- **Búsqueda de grupos** — Buscador de nodos URL por título con expansión de métodos anidados
+- **Onboarding** — 3 slides interactivos con video e imágenes
+- **Diseño moderno** — Paleta Zinc + Emerald, sombras tintadas, anillos de foco unificados, modo oscuro compatibilidad total

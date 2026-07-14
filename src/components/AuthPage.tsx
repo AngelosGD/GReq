@@ -121,200 +121,204 @@ export function AuthPage({ onSuccess }: Props) {
   }
 
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-center px-6 py-12
-                    bg-gradient-to-br from-zinc-50 to-white
-                    dark:from-zinc-950 dark:to-zinc-900 transition-colors duration-300">
+    <div className="min-h-[100dvh] flex items-center justify-center px-4 py-12
+                    bg-gradient-to-br from-zinc-50 via-white to-zinc-100/60
+                    dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950 transition-colors duration-300">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center mb-6">
-            <Logo size={52} />
+        <div className="bg-white dark:bg-zinc-900/90 rounded-2xl shadow-tinted-lg border border-zinc-200/60 dark:border-zinc-800/60 px-8 py-10">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center mb-5">
+              <Logo size={48} />
+            </div>
+            <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white mb-1.5">
+              {mode === 'signin' ? 'Bienvenido de vuelta' : 'Creá tu cuenta'}
+            </h1>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              {mode === 'signin'
+                ? 'Iniciá sesión para continuar'
+                : 'Registrate para empezar'}
+            </p>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white mb-2">
-            {mode === 'signin' ? 'Bienvenido de vuelta a GReq' : 'Crea tu cuenta en GReq'}
-          </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            {mode === 'signin'
-              ? 'Inicia sesión para continuar'
-              : 'Regístrate para empezar'}
-          </p>
-        </div>
 
-        {error && (
-          <div className="mb-6 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium text-center">
-            {error}
-          </div>
-        )}
-
-        <div className="flex gap-3 mb-8">
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => handleOAuth(OAuthProvider.Google)}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl
-                       border border-zinc-300 dark:border-zinc-700
-                       bg-white dark:bg-zinc-900
-                       text-zinc-700 dark:text-zinc-300
-                       hover:bg-zinc-50 dark:hover:bg-zinc-800
-                       active:scale-[0.98] transition-all duration-200 text-sm font-medium
-                       disabled:opacity-50 disabled:cursor-wait"
-          >
-            <GoogleIcon />
-            Google
-          </button>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => handleOAuth(OAuthProvider.Github)}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl
-                       border border-zinc-300 dark:border-zinc-700
-                       bg-white dark:bg-zinc-900
-                       text-zinc-700 dark:text-zinc-300
-                       hover:bg-zinc-50 dark:hover:bg-zinc-800
-                       active:scale-[0.98] transition-all duration-200 text-sm font-medium
-                       disabled:opacity-50 disabled:cursor-wait"
-          >
-            <GithubIcon />
-            GitHub
-          </button>
-        </div>
-
-        <div className="relative mb-8">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-zinc-200 dark:border-zinc-800" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white dark:bg-zinc-900 px-3 text-zinc-400 dark:text-zinc-500">
-              o con correo
-            </span>
-          </div>
-        </div>
-
-        <div className="flex mb-8 bg-zinc-100 dark:bg-zinc-800 rounded-xl p-1">
-          <button
-            onClick={() => { setMode('signin'); setError('') }}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-              mode === 'signin'
-                ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm'
-                : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
-            }`}
-          >
-            Iniciar Sesión
-          </button>
-          <button
-            onClick={() => { setMode('signup'); setError('') }}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-              mode === 'signup'
-                ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm'
-                : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
-            }`}
-          >
-            Crear Cuenta
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === 'signup' && (
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
-                Nombre
-              </label>
-              <input
-                id="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Tu nombre"
-                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700
-                           bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white
-                           placeholder:text-zinc-400 dark:placeholder:text-zinc-600
-                           focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500
-                           transition-all duration-200 text-sm"
-              />
+          {error && (
+            <div className="mb-5 p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200/80 dark:border-red-800/50 text-red-700 dark:text-red-400 text-xs font-medium text-center">
+              {error}
             </div>
           )}
 
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
-              Correo electrónico
-            </label>
-            <div className="relative">
-              <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="ejemplo@correo.com"
-                required
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700
-                           bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white
-                           placeholder:text-zinc-400 dark:placeholder:text-zinc-600
-                           focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500
-                           transition-all duration-200 text-sm"
-              />
+          <div className="flex gap-2.5 mb-6">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => handleOAuth(OAuthProvider.Google)}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl
+                         border border-zinc-200/80 dark:border-zinc-700/80
+                         bg-white dark:bg-zinc-900
+                         text-zinc-700 dark:text-zinc-300
+                         hover:bg-zinc-50 dark:hover:bg-zinc-800
+                         hover:border-zinc-300 dark:hover:border-zinc-600
+                         active:scale-[0.98] transition-all duration-150 text-sm font-medium
+                         disabled:opacity-50 disabled:cursor-wait"
+            >
+              <GoogleIcon />
+              Google
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => handleOAuth(OAuthProvider.Github)}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl
+                         border border-zinc-200/80 dark:border-zinc-700/80
+                         bg-white dark:bg-zinc-900
+                         text-zinc-700 dark:text-zinc-300
+                         hover:bg-zinc-50 dark:hover:bg-zinc-800
+                         hover:border-zinc-300 dark:hover:border-zinc-600
+                         active:scale-[0.98] transition-all duration-150 text-sm font-medium
+                         disabled:opacity-50 disabled:cursor-wait"
+            >
+              <GithubIcon />
+              GitHub
+            </button>
+          </div>
+
+          <div className="relative mb-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-zinc-200/70 dark:border-zinc-800/70" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white dark:bg-zinc-900/90 px-3 text-zinc-400 dark:text-zinc-500 tracking-wider">
+                o con correo
+              </span>
             </div>
           </div>
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
-              Contraseña
-            </label>
-            <div className="relative">
-              <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-              <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700
-                           bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white
-                           placeholder:text-zinc-400 dark:placeholder:text-zinc-600
-                           focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500
-                           transition-all duration-200 text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-              >
-                {showPassword ? (
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                )}
-              </button>
-            </div>
+          <div className="flex mb-6 bg-zinc-100/80 dark:bg-zinc-800/60 rounded-xl p-1">
+            <button
+              onClick={() => { setMode('signin'); setError('') }}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-150 ${
+                mode === 'signin'
+                  ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-tinted'
+                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
+              }`}
+            >
+              Iniciar Sesión
+            </button>
+            <button
+              onClick={() => { setMode('signup'); setError('') }}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-150 ${
+                mode === 'signup'
+                  ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-tinted'
+                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
+              }`}
+            >
+              Crear Cuenta
+            </button>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2.5 rounded-xl text-sm font-semibold
-                       bg-zinc-900 dark:bg-white text-white dark:text-zinc-900
-                       hover:bg-zinc-800 dark:hover:bg-zinc-200
-                       active:scale-[0.98] transition-all duration-200
-                       shadow-sm shadow-zinc-900/10
-                       disabled:opacity-50 disabled:cursor-wait"
-          >
-            {loading ? 'Cargando...' : mode === 'signin' ? 'Iniciar Sesión' : 'Crear Cuenta'}
-          </button>
-        </form>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {mode === 'signup' && (
+              <div>
+                <label htmlFor="name" className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+                  Nombre
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Tu nombre"
+                  className="w-full px-4 py-2.5 rounded-xl border border-zinc-200/80 dark:border-zinc-700/80
+                             bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white
+                             placeholder:text-zinc-400 dark:placeholder:text-zinc-600
+                             focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/70
+                             transition-all duration-150 text-sm"
+                />
+              </div>
+            )}
 
-        <div className="mt-6 text-center">
+            <div>
+              <label htmlFor="email" className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+                Correo electrónico
+              </label>
+              <div className="relative">
+                <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="ejemplo@correo.com"
+                  required
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200/80 dark:border-zinc-700/80
+                             bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white
+                             placeholder:text-zinc-400 dark:placeholder:text-zinc-600
+                             focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/70
+                             transition-all duration-150 text-sm"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+                Contraseña
+              </label>
+              <div className="relative">
+                <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-zinc-200/80 dark:border-zinc-700/80
+                             bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white
+                             placeholder:text-zinc-400 dark:placeholder:text-zinc-600
+                             focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/70
+                             transition-all duration-150 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                >
+                  {showPassword ? (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold
+                         bg-zinc-900 dark:bg-white text-white dark:text-zinc-900
+                         hover:bg-zinc-800 dark:hover:bg-zinc-200
+                         active:scale-[0.98] transition-all duration-150
+                         shadow-tinted-md
+                         disabled:opacity-50 disabled:cursor-wait"
+            >
+              {loading ? 'Cargando...' : mode === 'signin' ? 'Iniciar Sesión' : 'Crear Cuenta'}
+            </button>
+          </form>
+        </div>
+
+        <div className="mt-5 text-center">
           <button
             onClick={onSuccess}
-            className="text-[11px] font-medium text-zinc-400 hover:text-zinc-600 transition-colors"
+            className="text-xs font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150"
           >
             Entrar como invitado
           </button>

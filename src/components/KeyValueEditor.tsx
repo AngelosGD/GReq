@@ -17,12 +17,12 @@ export function KeyValueEditor({ pairs, onChange, keyLabel, valueLabel }: {
           <input
             value={p.key} onChange={(e) => update(i, 'key', e.target.value)}
             placeholder={keyLabel ?? 'Key'}
-            className="flex-1 min-w-0 bg-zinc-50 border border-zinc-200/80 rounded-lg px-2 py-1.5 text-[11px] text-zinc-700 outline-none focus:border-emerald-400 transition-all"
+            className="flex-1 min-w-0 bg-zinc-50 border border-zinc-200/70 rounded-lg px-2 py-1.5 text-[11px] text-zinc-700 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all"
           />
           <input
             value={p.value} onChange={(e) => update(i, 'value', e.target.value)}
             placeholder={valueLabel ?? 'Value'}
-            className="flex-1 min-w-0 bg-zinc-50 border border-zinc-200/80 rounded-lg px-2 py-1.5 text-[11px] text-zinc-700 outline-none focus:border-emerald-400 transition-all"
+            className="flex-1 min-w-0 bg-zinc-50 border border-zinc-200/70 rounded-lg px-2 py-1.5 text-[11px] text-zinc-700 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all"
           />
           <button
             onClick={() => remove(i)}
@@ -36,7 +36,7 @@ export function KeyValueEditor({ pairs, onChange, keyLabel, valueLabel }: {
       ))}
       <button
         onClick={add}
-        className="text-[10px] font-medium text-emerald-500 hover:text-emerald-600 transition-colors"
+        className="text-[10px] font-medium text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50/50 px-2 py-1 rounded-lg transition-colors"
       >
         + Añadir
       </button>

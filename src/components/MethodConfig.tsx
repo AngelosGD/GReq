@@ -43,7 +43,7 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
             max={99}
             value={(d.repeatCount as number) ?? 1}
             onChange={(e) => setNodeData(node.id, { repeatCount: parseInt(e.target.value) || 1 })}
-            className="w-14 bg-zinc-50 border border-zinc-200/70 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-700 outline-none focus:border-zinc-300 transition-all"
+            className="w-14 bg-zinc-50 border border-zinc-200/70 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all"
           />
           <span className="text-[10px] text-zinc-400">veces</span>
         </div>
@@ -76,7 +76,7 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
           <textarea
             value={(d.body as string) ?? '{\n  \n}'}
             onChange={(e) => setNodeData(node.id, { body: e.target.value })}
-            className="w-full h-28 bg-zinc-50 border border-zinc-200/70 rounded-lg px-3 py-2 text-[11px] font-mono text-zinc-700 outline-none focus:border-zinc-300 transition-all resize-none"
+            className="w-full h-28 bg-zinc-50 border border-zinc-200/70 rounded-lg px-3 py-2 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all resize-none"
           />
         )}
         {(d.bodyType ?? 'json') === 'text' && (
@@ -84,7 +84,7 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
             value={(d.body as string) ?? ''}
             onChange={(e) => setNodeData(node.id, { body: e.target.value })}
             placeholder="Texto plano..."
-            className="w-full h-28 bg-zinc-50 border border-zinc-200/70 rounded-lg px-3 py-2 text-[11px] font-mono text-zinc-700 outline-none focus:border-zinc-300 transition-all resize-none"
+            className="w-full h-28 bg-zinc-50 border border-zinc-200/70 rounded-lg px-3 py-2 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all resize-none"
           />
         )}
         {(d.bodyType ?? 'json') === 'form' && (
@@ -115,7 +115,7 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
             value={(d.authValue as string) ?? ''}
             onChange={(e) => setNodeData(node.id, { authValue: e.target.value })}
             placeholder={d.auth === 'Bearer' ? 'Token' : 'usuario:contraseña'}
-            className="w-full bg-zinc-50 border border-zinc-200/70 rounded-lg px-3 py-1.5 text-[11px] font-mono text-zinc-700 outline-none focus:border-zinc-300 transition-all"
+            className="w-full bg-zinc-50 border border-zinc-200/70 rounded-lg px-3 py-1.5 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all"
           />
         )}
       </div>

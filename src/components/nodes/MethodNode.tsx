@@ -24,21 +24,23 @@ function MethodNode({ data, selected, id }: NodeProps<MethodNodeType>) {
   return (
     <div
       className={`
-        relative bg-white rounded-xl transition-shadow duration-200
-        border ${selected ? 'border-zinc-300 shadow-md' : 'border-zinc-200/70 shadow-sm hover:shadow-md'}
+        relative bg-white rounded-xl transition-all duration-200
+        ${selected
+          ? 'border-zinc-300/80 shadow-tinted-md'
+          : 'border-zinc-200/60 shadow-tinted hover:shadow-tinted-md hover:border-zinc-300/60'
+        }
       `}
       style={{ minWidth: 180 }}
     >
-      {/* Colored left accent bar */}
       <div
-        className={`absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full transition-all duration-200 ${selected ? 'opacity-100' : 'opacity-70'}`}
-        style={{ backgroundColor: cfg.dot }}
+        className={`absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full transition-all duration-300 ${selected ? 'opacity-100' : 'opacity-60'}`}
+        style={{ backgroundColor: cfg.dot, boxShadow: selected ? `0 0 6px ${cfg.dot}66` : 'none' }}
       />
 
       <div className="relative pl-5 pr-3.5 py-3">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: cfg.dot }} />
+            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: cfg.dot, boxShadow: `0 0 4px ${cfg.dot}44` }} />
             <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: cfg.dot }}>
               {data.method}
             </span>
@@ -46,7 +48,7 @@ function MethodNode({ data, selected, id }: NodeProps<MethodNodeType>) {
           <div className="flex items-center gap-1.5">
             <span className="text-[9px] text-zinc-400 font-medium">Solicitud</span>
             {data.repeatCount && data.repeatCount > 1 && (
-              <span className="text-[8px] font-mono font-semibold text-zinc-400 bg-zinc-100 px-1 py-0.5 rounded leading-none">
+              <span className="text-[8px] font-mono font-semibold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded leading-none">
                 ×{data.repeatCount}
               </span>
             )}
@@ -59,10 +61,10 @@ function MethodNode({ data, selected, id }: NodeProps<MethodNodeType>) {
           onMouseEnter={() => setHover(true)}
           onMouseLeave={() => setHover(false)}
           className="nodrag w-full flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold text-white
-                     transition-all active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait"
+                     transition-all duration-150 active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait"
           style={{
             background: loading ? '#a1a1aa' : `linear-gradient(135deg, ${cfg.from}, ${cfg.to})`,
-            boxShadow: hover && !loading ? `0 2px 8px ${cfg.dot}33` : 'none',
+            boxShadow: hover && !loading ? `0 4px 12px ${cfg.dot}44` : `0 1px 3px ${cfg.dot}22`,
             transform: hover && !loading ? 'translateY(-1px)' : 'translateY(0)',
           }}
         >
@@ -83,13 +85,13 @@ function MethodNode({ data, selected, id }: NodeProps<MethodNodeType>) {
       <Handle
         type="target"
         position={Position.Left}
-        className="!w-2.5 !h-2.5 !border-2 !border-white !shadow-sm"
+        className="!w-2.5 !h-2.5 !border-2 !border-white !shadow-tinted-md !transition-all !duration-200 hover:!scale-125"
         style={{ top: '50%', transform: 'translateY(-50%)', background: cfg.dot }}
       />
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!w-2.5 !h-2.5 !border-2 !border-white !shadow-sm"
+        className="!w-2.5 !h-2.5 !border-2 !border-white !shadow-tinted-md !transition-all !duration-200 hover:!scale-125"
         style={{ left: '50%', transform: 'translateX(-50%)', background: cfg.dot }}
       />
     </div>

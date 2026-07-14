@@ -478,7 +478,7 @@ export function MainApp() {
               </svg>
             </button>
             {user && (
-              <div className="absolute right-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-zinc-200/80 z-30 py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+              <div className="absolute right-0 top-full mt-1.5 w-44 bg-white dark:bg-zinc-900 rounded-xl shadow-tinted-lg border border-zinc-200/80 dark:border-zinc-700/80 z-30 py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
                 <div className="px-3 py-2 text-[11px] text-zinc-500 truncate border-b border-zinc-100">
                   {user.email}
                 </div>

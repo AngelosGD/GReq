@@ -7,23 +7,23 @@ export function VariablesHint() {
 
   return (
     <div className="space-y-2">
-      <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Variables disponibles</label>
+      <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.1em] block mb-1.5">Variables disponibles</label>
       <div className="space-y-1.5 max-h-40 overflow-y-auto">
         {entries.map(([id, res]) => {
           const isJson = res.body.startsWith('{') || res.body.startsWith('[')
           return (
             <details key={id} className="text-[10px]">
-              <summary className="cursor-pointer text-zinc-600 hover:text-zinc-800 font-medium">
+              <summary className="cursor-pointer text-zinc-600 dark:text-zinc-300 hover:text-zinc-800 dark:hover:text-zinc-100 font-medium transition-colors duration-150">
                 {id.slice(0, 8)}
-                <span className="text-zinc-400 ml-1">({res.status})</span>
+                <span className="text-zinc-400 dark:text-zinc-500 ml-1">({res.status})</span>
               </summary>
               <div className="mt-1 ml-2 space-y-0.5">
-                <code className="block text-zinc-500 font-mono text-[9px]">$prev.status</code>
-                <code className="block text-zinc-500 font-mono text-[9px]">$prev.headers.X-*</code>
+                <code className="block text-zinc-500 dark:text-zinc-400 font-mono text-[9px]">$prev.status</code>
+                <code className="block text-zinc-500 dark:text-zinc-400 font-mono text-[9px]">$prev.headers.X-*</code>
                 {isJson && (
                   <>
-                    <code className="block text-zinc-500 font-mono text-[9px]">$prev.body</code>
-                    <code className="block text-zinc-500 font-mono text-[9px]">$prev.body.path.to.field</code>
+                    <code className="block text-zinc-500 dark:text-zinc-400 font-mono text-[9px]">$prev.body</code>
+                    <code className="block text-zinc-500 dark:text-zinc-400 font-mono text-[9px]">$prev.body.path.to.field</code>
                   </>
                 )}
               </div>
