@@ -35,6 +35,7 @@ import { AiChat } from './AiChat'
 import { GitHubSection } from './GitHubSection'
 import { EnvPanel } from './EnvPanel'
 import { useEnvStore } from '../store/envStore'
+import { ExportCodePanel } from './ExportCodePanel'
 
 type SidebarMode = 'options' | 'nodes'
 
@@ -60,6 +61,7 @@ export function MainApp() {
   const [showAiChat, setShowAiChat] = useState(false)
   const [showGithubSection, setShowGithubSection] = useState(false)
   const [showEnvPanel, setShowEnvPanel] = useState(false)
+  const [showExportCode, setShowExportCode] = useState(false)
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
   const takeSnapshot = useFlowStore((s) => s.takeSnapshot)
@@ -520,7 +522,7 @@ export function MainApp() {
                 <div className="px-3 pb-1.5">
                   <div className="relative">
                     <button
-                      onClick={() => { setSidebarMode('nodes'); setShowMockApi(false); setShowGithubSection(false); setShowEnvPanel(false); }}
+                      onClick={() => { setSidebarMode('nodes'); setShowMockApi(false); setShowGithubSection(false); setShowEnvPanel(false); setShowExportCode(false); }}
                       className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
                         !showMockApi && !showGithubSection ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
                       }`}
@@ -554,7 +556,7 @@ export function MainApp() {
                   <AuthGuard label="Inicia sesión para usar APIs mock">
                     <div className="relative">
                       <button
-                        onClick={() => { setShowMockApi(true); setShowGithubSection(false); setShowEnvPanel(false); setSelectedNode(null); setSidebarMode('options'); }}
+                        onClick={() => { setShowMockApi(true); setShowGithubSection(false); setShowEnvPanel(false); setShowExportCode(false); setSelectedNode(null); setSidebarMode('options'); }}
                         className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
                           showMockApi ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
                         }`}
@@ -572,7 +574,7 @@ export function MainApp() {
                 <div className="px-3 pb-0.5">
                   <div className="relative">
                     <button
-                      onClick={() => { setShowGithubSection(true); setShowMockApi(false); setShowEnvPanel(false); setSelectedNode(null); setSidebarMode('options'); }}
+                      onClick={() => { setShowGithubSection(true); setShowMockApi(false); setShowEnvPanel(false); setShowExportCode(false); setSelectedNode(null); setSidebarMode('options'); }}
                       className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
                         showGithubSection ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
                       }`}
@@ -589,7 +591,7 @@ export function MainApp() {
                 <div className="px-3 pb-0.5">
                   <div className="relative">
                     <button
-                      onClick={() => { setShowEnvPanel(true); setShowMockApi(false); setShowGithubSection(false); setSelectedNode(null); setSidebarMode('options'); }}
+                      onClick={() => { setShowEnvPanel(true); setShowMockApi(false); setShowGithubSection(false); setShowExportCode(false); setSelectedNode(null); setSidebarMode('options'); }}
                       className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
                         showEnvPanel ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
                       }`}
@@ -601,6 +603,21 @@ export function MainApp() {
                       Entornos
                     </button>
                   </div>
+                </div>
+
+                <div className="px-3 pb-0.5">
+                  <button
+                    onClick={() => { setShowExportCode(true); setShowMockApi(false); setShowGithubSection(false); setShowEnvPanel(false); setSelectedNode(null); setSidebarMode('options'); }}
+                    className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] ${
+                      showExportCode ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
+                    }`}
+                  >
+                    {showExportCode && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800" />}
+                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+                    </svg>
+                    Exportar código
+                  </button>
                 </div>
 
                 <div className="flex-1" />
@@ -670,6 +687,16 @@ export function MainApp() {
             {showEnvPanel && (
               <div className="absolute right-0 top-0 bottom-0 z-20 w-80">
                 <EnvPanel onClose={() => setShowEnvPanel(false)} />
+              </div>
+            )}
+
+            {showExportCode && (
+              <div className="absolute right-0 top-0 bottom-0 z-20 w-80">
+                <ExportCodePanel
+                  nodes={nodes}
+                  edges={edges}
+                  onClose={() => setShowExportCode(false)}
+                />
               </div>
             )}
 
