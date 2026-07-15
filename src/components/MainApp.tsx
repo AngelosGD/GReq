@@ -33,6 +33,8 @@ import { HistoryModal } from './HistoryModal'
 import { GroupDeleteModal } from './GroupDeleteModal'
 import { AiChat } from './AiChat'
 import { GitHubSection } from './GitHubSection'
+import { EnvPanel } from './EnvPanel'
+import { useEnvStore } from '../store/envStore'
 
 type SidebarMode = 'options' | 'nodes'
 
@@ -57,6 +59,7 @@ export function MainApp() {
   const [showProfile, setShowProfile] = useState(false)
   const [showAiChat, setShowAiChat] = useState(false)
   const [showGithubSection, setShowGithubSection] = useState(false)
+  const [showEnvPanel, setShowEnvPanel] = useState(false)
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
   const takeSnapshot = useFlowStore((s) => s.takeSnapshot)
@@ -108,6 +111,7 @@ export function MainApp() {
 
     const methodData = getMethodData(methodNode)
     const repeatCount = methodData.repeatCount ?? 1
+    const envVars = Object.fromEntries(useEnvStore.getState().getActiveVars().map((v) => [v.key, v.value]))
 
     setLoading(nodeId, true)
 
@@ -136,7 +140,7 @@ export function MainApp() {
 
       let rawUrl = (sourceData.url as string) || ''
       // Resolve variables first, then add http:// prefix if needed
-      let url = resolveVariables(rawUrl, allResponses, prevMethodId)
+      let url = resolveVariables(rawUrl, allResponses, prevMethodId, envVars)
       if (!url.startsWith('http://') && !url.startsWith('https://') && url) {
         url = `http://${url}`
       }
@@ -145,7 +149,7 @@ export function MainApp() {
       if (params.length > 0) {
         const qs = params
           .filter((p) => p.key)
-          .map((p) => `${encodeURIComponent(resolveVariables(p.key, allResponses, prevMethodId))}=${encodeURIComponent(resolveVariables(p.value, allResponses, prevMethodId))}`)
+          .map((p) => `${encodeURIComponent(resolveVariables(p.key, allResponses, prevMethodId, envVars))}=${encodeURIComponent(resolveVariables(p.value, allResponses, prevMethodId, envVars))}`)
           .join('&')
         if (qs) {
           url += (url.includes('?') ? '&' : '?') + qs
@@ -153,11 +157,11 @@ export function MainApp() {
       }
 
       const resolvedHeaders = (methodData.headers as { key: string; value: string }[] ?? []).map((h) => ({
-        key: resolveVariables(h.key, allResponses, prevMethodId),
-        value: resolveVariables(h.value, allResponses, prevMethodId),
+        key: resolveVariables(h.key, allResponses, prevMethodId, envVars),
+        value: resolveVariables(h.value, allResponses, prevMethodId, envVars),
       }))
-      const resolvedBody = resolveVariables(methodData.body ?? '', allResponses, prevMethodId)
-      const resolvedAuthValue = resolveVariables(methodData.authValue ?? '', allResponses, prevMethodId)
+      const resolvedBody = resolveVariables(methodData.body ?? '', allResponses, prevMethodId, envVars)
+      const resolvedAuthValue = resolveVariables(methodData.authValue ?? '', allResponses, prevMethodId, envVars)
 
       const allResponsesArr: StoredResponse[] = []
 
@@ -516,7 +520,7 @@ export function MainApp() {
                 <div className="px-3 pb-1.5">
                   <div className="relative">
                     <button
-                      onClick={() => { setSidebarMode('nodes'); setShowMockApi(false); setShowGithubSection(false); }}
+                      onClick={() => { setSidebarMode('nodes'); setShowMockApi(false); setShowGithubSection(false); setShowEnvPanel(false); }}
                       className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
                         !showMockApi && !showGithubSection ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
                       }`}
@@ -550,7 +554,7 @@ export function MainApp() {
                   <AuthGuard label="Inicia sesión para usar APIs mock">
                     <div className="relative">
                       <button
-                        onClick={() => { setShowMockApi(true); setShowGithubSection(false); setSelectedNode(null); setSidebarMode('options'); }}
+                        onClick={() => { setShowMockApi(true); setShowGithubSection(false); setShowEnvPanel(false); setSelectedNode(null); setSidebarMode('options'); }}
                         className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
                           showMockApi ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
                         }`}
@@ -568,7 +572,7 @@ export function MainApp() {
                 <div className="px-3 pb-0.5">
                   <div className="relative">
                     <button
-                      onClick={() => { setShowGithubSection(true); setShowMockApi(false); setSelectedNode(null); setSidebarMode('options'); }}
+                      onClick={() => { setShowGithubSection(true); setShowMockApi(false); setShowEnvPanel(false); setSelectedNode(null); setSidebarMode('options'); }}
                       className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
                         showGithubSection ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
                       }`}
@@ -578,6 +582,23 @@ export function MainApp() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0022 12c0-5.523-4.477-10-10-10z" />
                       </svg>
                       Desde GitHub
+                    </button>
+                  </div>
+                </div>
+
+                <div className="px-3 pb-0.5">
+                  <div className="relative">
+                    <button
+                      onClick={() => { setShowEnvPanel(true); setShowMockApi(false); setShowGithubSection(false); setSelectedNode(null); setSidebarMode('options'); }}
+                      className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
+                        showEnvPanel ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
+                      }`}
+                    >
+                      {showEnvPanel && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800" />}
+                      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                      </svg>
+                      Entornos
                     </button>
                   </div>
                 </div>
@@ -645,6 +666,12 @@ export function MainApp() {
             )}
 
 
+
+            {showEnvPanel && (
+              <div className="absolute right-0 top-0 bottom-0 z-20 w-80">
+                <EnvPanel onClose={() => setShowEnvPanel(false)} />
+              </div>
+            )}
 
             {showGithubSection ? (
               <GitHubSection

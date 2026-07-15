@@ -11,9 +11,12 @@ export function resolveVariables(
   template: string,
   responses: Record<string, { status: number; statusText: string; headers: { key: string; value: string }[]; body: string }>,
   defaultNodeId?: string,
+  envVars?: Record<string, string>,
 ): string {
   return template.replace(/\{\{(.+?)\}\}/g, (match, expr) => {
     const trimmed = expr.trim()
+
+    if (envVars?.[trimmed] !== undefined) return envVars[trimmed]
 
     let sourceId: string | undefined
     let restPath: string
