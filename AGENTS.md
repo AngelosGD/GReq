@@ -41,13 +41,17 @@ No lint/test/format/codegen scripts. `noUnusedLocals` + `noUnusedParameters` in 
 {{$prev.status}}              — status code
 {{$prev.statusText}}          — status text
 {{nodeId.body.path}}          — explicit node reference by ID
+{{varName}}                   — env variable from active profile (via envStore)
 ```
 
 ## Backend IPC (`src-tauri/src/lib.rs` — 9 registered commands)
 All Rust structs `#[serde(rename_all = "camelCase")]` — JS sends `bodyType`, `authType`, `port`, etc.
 
 - `make_request` — auto-prepends `http://` if no scheme, 30s timeout, maps UPDATE→PUT
-- `start_mock_server` — axum mock on `127.0.0.1:{port}` (random if 0). `MockConfig`: `{ path, methods, status, headers, body, port, delayMs, methodConfigs, fields, sampleData }`. Smart per-method handler: GET returns array (no ID) or single (/:id), POST merges body+fields → 201+gen ID, DELETE → `{deleted:true,id}`, UPDATE/PUT/PATCH → `{updated:true,id,data}`. Fields typed schema (`string`/`int`/`bool`). Inspect endpoint at `GET /__inspect` returns last request.
+- `start_mock_server` — axum mock on `127.0.0.1:{port}` (random if 0). `MockConfig`: `{ path, methods, status, headers, body, port, delayMs, methodConfigs, fields, sampleData }`. Smart per-method handler: GET returns array (no ID) or single (/:id), POST merges body+fields → 201+gen ID, DELETE → `{deleted:true,id}`, UPDATE/PUT/PATCH → `{updated:true,id,data}`. Fields typed schema (`string`/`int`/`bool`).
+- **Dynamic templates** (`mock.rs:resolve_dynamic`): resolves `{{$uuid}}`, `{{$timestamp}}`, `{{$randomInt}}`, `{{$randomBoolean}}`, `{{$randomName}}`, `{{$randomEmail}}`, `{{$randomWord}}`, `{{$randomNumber(min,max)}}` in response bodies.
+- **Inspect** at `GET /__inspect` — last request (non-consuming).
+- **History** at `GET /__history` — accumulated `RequestLog[]` (max 50), non-destructive reads.
 - `stop_mock_server(id)` / `stop_all_mock_servers` — graceful via oneshot channel
 - `start_oauth_webview(url)` — creates Tauri WebviewWindow for Appwrite OAuth, intercepts `cloud.appwrite.io/console/auth/oauth2/success`
 - `start_oauth_server` / `wait_oauth_callback` — legacy (replaced by webview for Appwrite)
@@ -64,6 +68,43 @@ Two modes: **local** (offline template generator — keyword matching detects en
 
 ## Close Handler (`src/lib/closeHandler.ts`)
 Registered in `App.tsx` mount. Intercepts window close when mock servers are running — shows dialog with "stop all / keep running / cancel". Uses `@tauri-apps/api/window` `onCloseRequested`.
+
+## Mock API Features
+- **OpenAPI import** (`src/lib/openapi.ts`): JSON + simple YAML parser, extracts paths/methods/fields/sample data, creates `MockApiItem[]`. YAML parser is indent-based (no multi-line strings, arrays, or anchors).
+- **Dynamic templates**: 8 template types resolved in Rust (`resolve_dynamic`). Frontend hints in `MockApiEditor.tsx` with click-to-insert buttons.
+- **Request history**: `__history` endpoint accumulates last 50 requests with method/path/body. Non-destructive (also has `__inspect` for single last request).
+- **Bulk sample data**: "Generar 5 filas" button in create modal — smart per-field type (email, name, int, bool).
+- **Per-method response bodies**: `methodBodies` overrides per-method across GET/POST/PUT/PATCH/DELETE within the same API.
+
+## Environment Variables (`src/store/envStore.ts`)
+- 3 default profiles: dev/staging/prod, persisted to `localStorage('greq-env-profiles')`.
+- `useEnvStore` Zustand store: `upsertVar`, `removeVar`, `renameProfile`, `addProfile`, `removeProfile`.
+- `getActiveVars()` returns vars for the selected profile (persisted in `localStorage('greq-env-active')`).
+- `resolveVariables.ts` accepts 4th param `envVars: Record<string, string>` — resolves `{{varName}}` before response lookup.
+- **EnvPanel** (`src/components/EnvPanel.tsx`): sidebar panel with profile selector + key/value editor.
+
+## Code Export (`src/lib/codegen.ts`, `src/components/ExportCodePanel.tsx`)
+- 4 languages: cURL, Python (`requests`), JavaScript (`fetch`), Rust (`reqwest`).
+- Groups: walks URL→Method edges from flow, one group per method chain.
+- `resolveVars: true` by default — reads env vars from `useEnvStore` and replaces `{{varName}}`.
+- `ExportCodePanel` sidebar: language selector, resolve toggle, copy/download buttons.
+- `countGroups()` for empty-state detection.
+
+## Remaining Improvements (Generate API Flow)
+- **OpenAPI YAML parser**: Current indent-based parser fails on multi-line strings, arrays, `$ref`, `allOf`/`oneOf`, anchors, multiple documents. Needs real YAML library or serde_yaml-based Rust command.
+- **No per-route method config on import**: Imported APIs only get one `responseBody` for all methods. After import, user must manually configure GET vs POST responses in editor.
+- **No response validation**: Mock server doesn't validate request body/params against schema. No schema generation from OpenAPI `requestBody` or `parameters`.
+- **No pagination**: Mock GET lists always return all records. No `?page=1&limit=10` style pagination, no `X-Total-Count` header.
+- **No conditional responses**: Can't define "if field=X return status 400" or random error simulation (status 500 every 3rd request).
+- **Bulk sample count hardcoded**: "Generar 5 filas" is hardcoded to 5. No "generar N filas" input.
+- **No delayed/dynamic field values**: Field default values are static; no `$uuid`/`$timestamp` in field default values.
+- **No WebSocket mock**: Only HTTP mock, no WebSocket endpoint for real-time testing.
+- **No server-sent events (SSE)**: No streaming endpoint support.
+- **No cURL paste import**: User can't paste a cURL command to create a mock API.
+- **Import from HAR/Postman/Insomnia**: Only OpenAPI is supported as import format.
+- **No response filtering/sorting**: `?fields=id,name` or `?sort=name:desc` not supported.
+- **History panel**: No frontend UI button to fetch/display `__history` (only `__inspect` modal is wired).
+- **No rate limiting / throttling**: Mock server always responds immediately (except `delayMs`). Can't simulate 429 or timeout.
 
 ## Known Issues
 - **invoke hangs when Tauri backend not ready**: `window.__TAURI_INTERNALS__` set by webview preload before Rust backend is ready. `invoke` never rejects. Wrapper: `invokeWithTimeout()` (4s) in `src/components/MockApi.tsx:11-15`. Reuse this pattern for any `invoke` that might race backend init.
