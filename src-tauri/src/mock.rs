@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use axum::{
     extract::{Path, State},
@@ -78,6 +78,151 @@ struct AppState {
     sample_data: Vec<HashMap<String, String>>,
     base_path: String,
     last_request: Mutex<Option<RequestLog>>,
+    request_history: Mutex<Vec<RequestLog>>,
+}
+
+fn pseudo_random(seed: u128) -> u64 {
+    let x = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    (x >> 33) as u64
+}
+
+fn dynamic_val(template: &str) -> String {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+    let base_seed = now.as_nanos();
+    let r = pseudo_random(base_seed);
+
+    let names = [
+        "Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace",
+        "Hank", "Ivy", "Jack", "Kate", "Liam", "Mia", "Noah", "Olivia",
+    ];
+    let surnames = [
+        "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia",
+        "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez",
+    ];
+    let words = [
+        "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta",
+        "theta", "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron",
+        "pi", "rho", "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega",
+        "foo", "bar", "baz", "qux", "quux", "corge", "grault", "garply",
+    ];
+
+    let idx = |i: usize, len: usize| -> usize { (r.wrapping_add(i as u64)) as usize % len };
+    let ridx = |i: usize, len: usize| -> usize { (r.wrapping_mul((i + 1) as u64)) as usize % len };
+
+    match template {
+        "$uuid" => {
+            let r1 = pseudo_random(now.as_nanos().wrapping_add(1));
+            let r2 = pseudo_random(now.as_nanos().wrapping_add(2));
+            let r3 = pseudo_random(now.as_nanos().wrapping_add(3));
+            format!(
+                "{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}",
+                (r1 >> 32) as u32,
+                (r1 & 0xFFFF) as u16,
+                (r2 >> 48) as u16 & 0xFFF,
+                ((r2 >> 32) as u16 & 0x3FFF) | 0x8000,
+                ((r2 & 0xFFFFFFFF) as u64) << 32 | (r3 as u64)
+            )
+        }
+        "$timestamp" => {
+            let secs = now.as_secs();
+            let nanos = now.subsec_nanos();
+            // ISO 8601 approximation
+            let days_since_epoch = secs / 86400;
+            let time_secs = secs % 86400;
+            let hours = time_secs / 3600;
+            let minutes = (time_secs % 3600) / 60;
+            let seconds = time_secs % 60;
+            // Simple date calculation from days since epoch (1970-01-01)
+            let mut y = 1970i64;
+            let mut d = days_since_epoch as i64;
+            loop {
+                let days_in_year = if (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0) { 366 } else { 365 };
+                if d < days_in_year { break; }
+                d -= days_in_year;
+                y += 1;
+            }
+            let is_leap = (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
+            let month_days = [31, if is_leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+            let mut m = 0;
+            for (i, &md) in month_days.iter().enumerate() {
+                if d < md { m = i + 1; break; }
+                d -= md;
+            }
+            let day = d + 1;
+            format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z", y, m, day, hours, minutes, seconds, nanos / 1_000_000)
+        }
+        "$randomInt" => format!("{}", r % 10000),
+        "$randomBoolean" => if r % 2 == 0 { "true".into() } else { "false".into() },
+        "$randomName" => {
+            let first = names[idx(0, names.len())];
+            let last = surnames[idx(1, surnames.len())];
+            format!("{} {}", first, last)
+        }
+        "$randomEmail" => {
+            let name = names[idx(0, names.len())].to_lowercase();
+            let domain = ["gmail.com", "outlook.com", "example.com", "test.io"][ridx(0, 4)];
+            format!("{}@{}", name, domain)
+        }
+        "$randomWord" => words[idx(0, words.len())].to_string(),
+        t if t.starts_with("$randomNumber(") && t.ends_with(')') => {
+            let inner = &t[14..t.len()-1];
+            if let Some((a, b)) = inner.split_once(',') {
+                let min = a.trim().parse::<i64>().unwrap_or(0);
+                let max = b.trim().parse::<i64>().unwrap_or(100);
+                if max > min {
+                    let range = (max - min + 1) as u64;
+                    let val = min + (r % range) as i64;
+                    format!("{}", val)
+                } else {
+                    format!("{}", min)
+                }
+            } else {
+                template.to_string()
+            }
+        }
+        _ => template.to_string(),
+    }
+}
+
+fn resolve_dynamic(body: &str) -> String {
+    let patterns = [
+        "$uuid",
+        "$timestamp",
+        "$randomInt",
+        "$randomBoolean",
+        "$randomName",
+        "$randomEmail",
+        "$randomWord",
+        "$randomNumber(",
+    ];
+    let mut result = body.to_string();
+    for pat in &patterns {
+        let template = format!("{{{{{}}}}}", pat);
+        if result.contains(&template) {
+            let resolved = dynamic_val(pat);
+            result = result.replace(&template, &resolved);
+        }
+    }
+    // Handle $randomNumber(min,max) which needs special closing brace handling
+    loop {
+        let start = result.find("{{$randomNumber(");
+        match start {
+            Some(s) => {
+                let after = &result[s + 2..];
+                let end = after.find("}}");
+                match end {
+                    Some(e) => {
+                        let inner = &after[..e];
+                        let resolved = dynamic_val(inner);
+                        result.replace_range(s..s + 2 + e + 2, &resolved);
+                    }
+                    None => break,
+                }
+            }
+            None => break,
+        }
+    }
+    result
 }
 
 fn add_cors_headers(resp: &mut axum::response::Response) {
@@ -146,11 +291,16 @@ fn extract_id(base: &str, req_path: &str) -> Option<String> {
 }
 
 async fn inspect_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let log = state.last_request.lock().await.take();
+    let log = state.last_request.lock().await.as_ref().cloned();
     match log {
         Some(log) => (axum::http::StatusCode::OK, Json(log)).into_response(),
         None => (axum::http::StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "No requests yet"}))).into_response(),
     }
+}
+
+async fn history_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let history = state.request_history.lock().await.clone();
+    Json(history)
 }
 
 fn has_smart_data(state: &AppState) -> bool {
@@ -281,11 +431,19 @@ async fn mock_handler(
         return resp;
     }
 
-    *state.last_request.lock().await = Some(RequestLog {
+    let log_entry = RequestLog {
         method: method_str.clone(),
         path: req_path.clone(),
         body: body.clone(),
-    });
+    };
+    *state.last_request.lock().await = Some(log_entry.clone());
+    {
+        let mut hist = state.request_history.lock().await;
+        hist.push(log_entry);
+        if hist.len() > 50 {
+            hist.remove(0);
+        }
+    }
 
     if state.delay_ms > 0 {
         tokio::time::sleep(Duration::from_millis(state.delay_ms)).await;
@@ -305,7 +463,8 @@ async fn mock_handler(
         _ => handle_update(&state, id_segment, &body, &eff_body),
     };
 
-    let mut resp = axum::response::Response::new(axum::body::Body::from(resp_body));
+    let resolved_body = resolve_dynamic(&resp_body);
+    let mut resp = axum::response::Response::new(axum::body::Body::from(resolved_body));
     *resp.status_mut() = status;
     resp.headers_mut().insert(
         axum::http::header::CONTENT_TYPE,
@@ -372,10 +531,12 @@ pub async fn start_mock_server(
         sample_data: config.sample_data.clone(),
         base_path: clean_path.clone(),
         last_request: Mutex::new(None),
+        request_history: Mutex::new(Vec::new()),
     });
 
     let app = Router::new()
         .route("/__inspect", any(inspect_handler))
+        .route("/__history", any(history_handler))
         .route("/*path", any(mock_handler))
         .with_state(app_state);
 

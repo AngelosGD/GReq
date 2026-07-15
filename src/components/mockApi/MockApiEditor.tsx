@@ -231,6 +231,17 @@ export function MockApiEditor({
             </div>
             <textarea value={effResponseBody(activeMethod)} onChange={(e) => onSetMethodResponseBody(activeMethod, e.target.value)}
               className="w-full bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg p-2.5 font-mono text-[10px] text-zinc-600 dark:text-zinc-300 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all resize-none h-24" />
+            <details className="text-[9px] text-zinc-400">
+              <summary className="cursor-pointer hover:text-zinc-600">Templates dinámicos</summary>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {['{{$randomName}}','{{$randomEmail}}','{{$randomInt}}','{{$uuid}}','{{$timestamp}}','{{$randomBoolean}}','{{$randomWord}}','{{$randomNumber(1,100)}}'].map((t) => (
+                  <button key={t} onClick={() => {
+                    const ta = document.querySelector('textarea.font-mono') as HTMLTextAreaElement
+                    if (ta) { ta.value += t; ta.dispatchEvent(new Event('input', { bubbles: true })) }
+                  }} className="px-1.5 py-0.5 rounded bg-zinc-100 hover:bg-zinc-200 text-zinc-500 font-mono transition-colors">{t}</button>
+                ))}
+              </div>
+            </details>
             <div className="flex justify-end">
               <button onClick={() => navigator.clipboard.writeText(genCurl(api, activeMethod))}
                 className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150 flex items-center gap-1">

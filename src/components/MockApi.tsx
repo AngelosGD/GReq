@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useAuthStore } from '../store/authStore'
 import { getMockApis, saveMockApi, deleteMockApi } from '../lib/database'
 import { trackServer, untrackServer, getActiveServers, clearTrackedServers } from '../lib/runningServers'
+import { parseOpenApiSpec } from '../lib/openapi'
 import { MockApiSidebar } from './mockApi/MockApiSidebar'
 import { MockApiEditor } from './mockApi/MockApiEditor'
 import { MockApiCreateModal } from './mockApi/MockApiCreateModal'
@@ -61,6 +62,9 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
   const [editPath, setEditPath] = useState('')
   const [editPort, setEditPort] = useState('')
   const [editMethods, setEditMethods] = useState<string[]>([])
+  const [showOpenApiImport, setShowOpenApiImport] = useState(false)
+  const [openApiText, setOpenApiText] = useState('')
+  const [openApiLoading, setOpenApiLoading] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -233,6 +237,25 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
     const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `mock-${api.name.replace(/\s+/g, '-').toLowerCase()}.json`; a.click(); URL.revokeObjectURL(url)
   }
 
+  const handleImportOpenApi = async () => {
+    if (!openApiText.trim()) return
+    setOpenApiLoading(true)
+    try {
+      const apis = parseOpenApiSpec(openApiText)
+      if (apis.length === 0) { alert('No se encontraron endpoints'); return }
+      for (const api of apis) {
+        setMockApis((a) => {
+          if (a.length >= 20) return a
+          return [...a, api as MockApiItem]
+        })
+      }
+      setShowOpenApiImport(false)
+      setOpenApiText('')
+      alert(`${apis.length} API(s) importadas correctamente`)
+    } catch (e) { alert(`Error al importar: ${e}`) }
+    finally { setOpenApiLoading(false) }
+  }
+
   const prevApiIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (activeApi && activeApi.id !== prevApiIdRef.current) {
@@ -244,11 +267,23 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
 
   return (
     <div className="h-full flex bg-white">
-      <MockApiSidebar
-        mockApis={mockApis} filter={filter} search={search} activeTabApiId={activeTab?.apiId ?? null}
-        onSetFilter={setFilter} onSetSearch={setSearch} onSelectApi={selectApi}
-        onTogglePin={togglePin} onNewApi={() => { setShowModal(true); setEditing(false) }} onClose={onClose}
-      />
+      <div className="flex flex-col">
+        <MockApiSidebar
+          mockApis={mockApis} filter={filter} search={search} activeTabApiId={activeTab?.apiId ?? null}
+          onSetFilter={setFilter} onSetSearch={setSearch} onSelectApi={selectApi}
+          onTogglePin={togglePin} onNewApi={() => { setShowModal(true); setEditing(false) }} onClose={onClose}
+        />
+        <div className="px-2 pb-2 border-t border-zinc-100 pt-2">
+          <button onClick={() => setShowOpenApiImport(true)}
+            className="flex items-center justify-center gap-1.5 w-full px-3 py-1.5 rounded-lg text-[10px] font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50 active:scale-[0.98] transition-all"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            Importar OpenAPI
+          </button>
+        </div>
+      </div>
 
       <div className="flex-1 flex flex-col min-w-0">
         {tabs.length > 0 && (
@@ -362,6 +397,33 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
           </div>
         </div>
       )}
+
+      {showOpenApiImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/15 backdrop-blur-sm" onClick={() => setShowOpenApiImport(false)}>
+          <div className="bg-white rounded-2xl shadow-tinted-lg border border-zinc-200/70 w-[520px]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-100">
+              <h3 className="text-sm font-semibold text-zinc-800">Importar OpenAPI</h3>
+              <button onClick={() => setShowOpenApiImport(false)} className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-[11px] text-zinc-500">Pegá el contenido de un archivo OpenAPI (JSON o YAML) para crear APIs de prueba automáticamente.</p>
+              <textarea value={openApiText} onChange={(e) => setOpenApiText(e.target.value)} placeholder='{"openapi":"3.0.0","paths":{...}}' rows={10}
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-3 font-mono text-[11px] text-zinc-700 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all resize-none placeholder-zinc-300" />
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-zinc-100">
+              <button onClick={() => setShowOpenApiImport(false)} className="px-3.5 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 hover:bg-zinc-100">Cancelar</button>
+              <button onClick={handleImportOpenApi} disabled={openApiLoading || !openApiText.trim()}
+                className="px-3.5 py-1.5 rounded-lg text-[11px] font-semibold bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] transition-all flex items-center gap-1.5">
+                {openApiLoading && <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                {openApiLoading ? 'Importando...' : 'Importar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

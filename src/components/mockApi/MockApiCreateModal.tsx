@@ -173,10 +173,32 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
                     </button>
                   </div>
                 ))}
-                <button onClick={addSampleRow} className="flex items-center gap-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                  Añadir registro
-                </button>
+                <div className="flex gap-2">
+                  <button onClick={addSampleRow} className="flex items-center gap-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                    Añadir registro
+                  </button>
+                  <button onClick={() => {
+                    const rows: Record<string, string>[] = []
+                    const firstNames = ['Alice','Bob','Charlie','Diana','Eve','Frank','Grace','Hank']
+                    const lastNames = ['Smith','Jones','Garcia','Lee','Kim','Brown','Chen','Patel']
+                    const domains = ['gmail.com','outlook.com','corp.io','demo.org']
+                    for (let i = 0; i < 5; i++) {
+                      const row: Record<string, string> = {}
+                      for (const f of formTempFields) {
+                        if (f.type === 'int') row[f.name] = String(Math.floor(Math.random() * 1000) + 1)
+                        else if (f.type === 'bool') row[f.name] = Math.random() > 0.5 ? 'true' : 'false'
+                        else if (f.name.toLowerCase().includes('email')) row[f.name] = `${firstNames[i % firstNames.length].toLowerCase()}@${domains[i % domains.length]}`
+                        else if (f.name.toLowerCase().includes('name') || f.name.toLowerCase().includes('nombre')) row[f.name] = `${firstNames[i % firstNames.length]} ${lastNames[i % lastNames.length]}`
+                        else row[f.name] = `${f.name}_${i + 1}`
+                      }
+                      rows.push(row)
+                    }
+                    setFormSampleData(rows)
+                  }} className="text-[10px] font-medium text-emerald-600 hover:text-emerald-700 transition-colors">
+                    Generar 5 filas
+                  </button>
+                </div>
               </div>
             </div>
           )}
