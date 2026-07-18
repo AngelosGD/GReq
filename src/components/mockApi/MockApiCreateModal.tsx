@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { FieldDef, methods, methodColors, FIELD_TYPES } from './types'
 import { generateMockApi } from '../../lib/ai'
 import { generateRows } from '../../lib/generateSampleData'
@@ -87,6 +87,33 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
 
   const updateSampleRow = (idx: number, field: string, value: string) =>
     setFormSampleData((p) => p.map((row, i) => (i === idx ? { ...row, [field]: value } : row)))
+
+  const responsePreview = useMemo(() => {
+    if (formTempFields.length === 0) return JSON.stringify({ message: 'Agregá campos para ver la respuesta' }, null, 2)
+    if (formSampleData.length > 0) {
+      return JSON.stringify(formSampleData.map((row, i) => ({
+        id: i + 1,
+        ...Object.fromEntries(formTempFields.map((f) => {
+          let v: any = row[f.name] ?? ''
+          if (f.type === 'int') v = Number(row[f.name]) || 0
+          else if (f.type === 'float') v = Number(row[f.name]) || 0
+          else if (f.type === 'bool') v = row[f.name] === 'true' || row[f.name] === '1'
+          return [f.name, v]
+        }))
+      })), null, 2)
+    }
+    return JSON.stringify({
+      id: 1,
+      ...Object.fromEntries(formTempFields.map((f) => {
+        let v: any = ''
+        if (f.type === 'int') v = 0
+        else if (f.type === 'float') v = 0
+        else if (f.type === 'bool') v = false
+        else v = f.value || `${f.name}_ejemplo`
+        return [f.name, v]
+      }))
+    }, null, 2)
+  }, [formTempFields, formSampleData])
 
   const validateRequired = (): boolean => {
     const errs: Record<string, string> = {}
@@ -218,6 +245,18 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
               </div>
             </div>
           )}
+
+          <div>
+            <details className="group">
+              <summary className="flex items-center gap-1.5 text-[9px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.12em] cursor-pointer hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
+                <svg className="w-2.5 h-2.5 group-open:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                Vista previa respuesta
+              </summary>
+              <div className="mt-2">
+                <pre className="bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg p-3 text-[9px] font-mono text-zinc-600 dark:text-zinc-300 overflow-x-auto whitespace-pre-wrap">{responsePreview}</pre>
+              </div>
+            </details>
+          </div>
 
           <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4">
             <button type="button" onClick={() => setAiDescription(aiDescription ? '' : ' ')} className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150">
