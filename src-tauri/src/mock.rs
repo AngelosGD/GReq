@@ -244,6 +244,7 @@ fn parse_val(fields: &[FieldDef], key: &str, raw: &str) -> serde_json::Value {
     let t = fields.iter().find(|f| f.name == key).map(|f| f.type_.as_str()).unwrap_or("");
     match t {
         "int" => raw.parse::<i64>().map_or(serde_json::Value::String(raw.into()), |n| serde_json::Value::Number(n.into())),
+        "float" => raw.parse::<f64>().map_or(serde_json::Value::String(raw.into()), |n| serde_json::Value::Number(serde_json::Number::from_f64(n).unwrap_or(serde_json::Number::from(0)))),
         "bool" => serde_json::Value::Bool(raw == "true" || raw == "1"),
         _ => serde_json::Value::String(raw.into()),
     }
@@ -255,6 +256,7 @@ fn build_item(fields: &[FieldDef], id: u64) -> serde_json::Value {
     for f in fields {
         let val = match f.type_.as_str() {
             "int" => f.value.as_ref().and_then(|v| v.parse::<i64>().ok()).map_or(serde_json::Value::Null, |n| serde_json::Value::Number(n.into())),
+            "float" => f.value.as_ref().and_then(|v| v.parse::<f64>().ok()).map_or(serde_json::Value::Null, |n| serde_json::Value::Number(serde_json::Number::from_f64(n).unwrap_or(serde_json::Number::from(0)))),
             "bool" => serde_json::Value::Bool(f.value.as_deref() == Some("true") || f.value.as_deref() == Some("1")),
             _ => serde_json::Value::String(f.value.clone().unwrap_or_else(|| "string".to_string())),
         };

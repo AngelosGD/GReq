@@ -17,6 +17,7 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
   const [formNewFieldName, setFormNewFieldName] = useState('')
   const [formNewFieldType, setFormNewFieldType] = useState<string>('string')
   const [formNewFieldValue, setFormNewFieldValue] = useState('')
+  const [formNewFieldMaxLen, setFormNewFieldMaxLen] = useState('')
   const [formSampleData, setFormSampleData] = useState<Record<string, string>[]>([])
   const [formPath, setFormPath] = useState('')
   const [formPort, setFormPort] = useState('')
@@ -56,9 +57,10 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
 
   const handleAddField = () => {
     if (!formNewFieldName.trim()) return
-    setFormTempFields((p) => [...p, { name: formNewFieldName.trim(), type: formNewFieldType, value: formNewFieldValue || undefined }])
+    setFormTempFields((p) => [...p, { name: formNewFieldName.trim(), type: formNewFieldType, value: formNewFieldValue || undefined, maxLength: formNewFieldMaxLen ? Number(formNewFieldMaxLen) : undefined }])
     setFormNewFieldName('')
     setFormNewFieldValue('')
+    setFormNewFieldMaxLen('')
     setFormErrors((e) => ({ ...e, fields: '' }))
   }
 
@@ -77,6 +79,13 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
 
   const handleCreate = () => {
     const ok = onCreate(formName, formMethods, formPath, formPort, formTempFields, formSampleData)
+    if (ok) {
+      setFormErrors({})
+    }
+  }
+
+  const handleCreateNoSample = () => {
+    const ok = onCreate(formName, formMethods, formPath, formPort, formTempFields, [])
     if (ok) {
       setFormErrors({})
     }
@@ -140,18 +149,22 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
                   <span className="text-[10px] font-mono text-zinc-700 dark:text-zinc-300">{f.name}</span>
                   {f.value && <span className="text-[9px] text-zinc-500 dark:text-zinc-400">: <span className="font-mono">{f.value}</span></span>}
                   <span className="text-[8px] font-mono text-zinc-400 dark:text-zinc-500 bg-zinc-200/60 dark:bg-zinc-700 px-1 rounded">{f.type}</span>
+                  {f.maxLength != null && <span className="text-[7px] font-mono text-zinc-300 dark:text-zinc-600">≤{f.maxLength}</span>}
                   <button onClick={() => handleRemoveField(i)} className="ml-0.5 w-3.5 h-3.5 flex items-center justify-center rounded text-zinc-400 dark:text-zinc-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors duration-150">
                     <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </div>
               ))}
             </div>
-            <div className="flex items-center gap-2">
-              <input value={formNewFieldName} onChange={(e) => setFormNewFieldName(e.target.value)} placeholder="nombre" className={inputClass + " flex-1 placeholder-zinc-300 dark:placeholder-zinc-500"} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddField() } }} />
-              <select value={formNewFieldType} onChange={(e) => { setFormNewFieldType(e.target.value); if (e.target.value === 'bool') setFormNewFieldValue('true'); if (e.target.value === 'int') setFormNewFieldValue(formNewFieldValue.replace(/\D/g, '')) }} className="bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg px-2 py-1.5 text-[10px] font-mono text-zinc-600 dark:text-zinc-300 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all">
+            <div className="flex items-center gap-1.5">
+              <input value={formNewFieldName} onChange={(e) => setFormNewFieldName(e.target.value)} placeholder="nombre" className={inputClass + " flex-1 min-w-0 placeholder-zinc-300 dark:placeholder-zinc-500"} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddField() } }} />
+              <select value={formNewFieldType} onChange={(e) => { setFormNewFieldType(e.target.value); setFormNewFieldValue(''); if (e.target.value === 'bool') setFormNewFieldValue('true') }} className="bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg px-1.5 py-1.5 text-[10px] font-mono text-zinc-600 dark:text-zinc-300 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all w-14 shrink-0">
                 {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
-              <input value={formNewFieldValue} onChange={(e) => { let v = e.target.value; if (formNewFieldType === 'int') v = v.replace(/\D/g, ''); setFormNewFieldValue(v) }} placeholder={formNewFieldType === 'int' ? '0' : formNewFieldType === 'bool' ? 'true' : 'valor'} className={inputClass + " flex-1 placeholder-zinc-300 dark:placeholder-zinc-500"} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddField() } }} />
+              <input value={formNewFieldValue} onChange={(e) => { let v = e.target.value; if (formNewFieldType === 'int') v = v.replace(/\D/g, ''); if (formNewFieldType === 'float') v = v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'); setFormNewFieldValue(v) }} placeholder={formNewFieldType === 'int' ? '0' : formNewFieldType === 'float' ? '0.0' : formNewFieldType === 'bool' ? 'true' : 'val'} className={inputClass + " w-20 shrink-0 placeholder-zinc-300 dark:placeholder-zinc-500"} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddField() } }} />
+              {formNewFieldType === 'string' && (
+                <input value={formNewFieldMaxLen} onChange={(e) => setFormNewFieldMaxLen(e.target.value.replace(/\D/g, ''))} placeholder="max" title="Longitud máxima" className={inputClass + " w-12 shrink-0 placeholder-zinc-300 dark:placeholder-zinc-500 text-center"} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddField() } }} />
+              )}
               <button onClick={handleAddField} className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 active:scale-[0.98] transition-all duration-150">
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
               </button>
@@ -187,10 +200,14 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
                       const row: Record<string, string> = {}
                       for (const f of formTempFields) {
                         if (f.type === 'int') row[f.name] = String(Math.floor(Math.random() * 1000) + 1)
+                        else if (f.type === 'float') row[f.name] = (Math.random() * 10000).toFixed(2)
                         else if (f.type === 'bool') row[f.name] = Math.random() > 0.5 ? 'true' : 'false'
                         else if (f.name.toLowerCase().includes('email')) row[f.name] = `${firstNames[i % firstNames.length].toLowerCase()}@${domains[i % domains.length]}`
                         else if (f.name.toLowerCase().includes('name') || f.name.toLowerCase().includes('nombre')) row[f.name] = `${firstNames[i % firstNames.length]} ${lastNames[i % lastNames.length]}`
-                        else row[f.name] = `${f.name}_${i + 1}`
+                        else {
+                          const val = `${f.name}_${i + 1}`
+                          row[f.name] = f.maxLength ? val.slice(0, f.maxLength) : val
+                        }
                       }
                       rows.push(row)
                     }
@@ -226,6 +243,7 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
 
         <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-zinc-100 dark:border-zinc-800">
           <button onClick={onClose} className="px-3.5 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors duration-150">Cancelar</button>
+          <button onClick={handleCreateNoSample} className="px-3 py-1.5 rounded-lg text-[11px] font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors duration-150">Crear sin registros</button>
           <button onClick={handleCreate} className="px-3.5 py-1.5 rounded-lg text-[11px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 active:scale-[0.98] transition-all duration-150">Crear API</button>
         </div>
       </div>

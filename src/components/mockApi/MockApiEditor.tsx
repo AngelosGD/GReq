@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { KeyValueEditor } from '../KeyValueEditor'
 import { MockApiItem, methodColors } from './types'
 
@@ -30,6 +31,7 @@ interface Props {
   onSetMethodStatusCode: (method: string, code: number) => void
   onSetMethodResponseBody: (method: string, body: string) => void
   onSetMethodResponseHeaders: (method: string, headers: { key: string; value: string }[]) => void
+  onSetSampleData: (data: Record<string, string>[]) => void
 }
 
 export function MockApiEditor({
@@ -40,7 +42,9 @@ export function MockApiEditor({
   onStartApi, onStopApi, onFetchInspect, onTestInCanvas,
   onDuplicateApi, onExportApi, onConfirmDelete,
   onSetDelayMs, onSetMethodStatusCode, onSetMethodResponseBody, onSetMethodResponseHeaders,
+  onSetSampleData,
 }: Props) {
+  const [genCount, setGenCount] = useState(5)
   const effStatusCode = (m: string) => api.methodBodies?.[m]?.statusCode ?? api.statusCode
   const effResponseBody = (m: string) => api.methodBodies?.[m]?.responseBody ?? api.responseBody
   const effResponseHeaders = (m: string) => api.methodBodies?.[m]?.responseHeaders ?? api.responseHeaders ?? []
@@ -209,9 +213,42 @@ export function MockApiEditor({
                   <div key={f.name} className="flex items-center gap-1 bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 rounded-md px-2 py-1">
                     <code className="text-[9px] font-mono text-zinc-600 dark:text-zinc-300">{f.name}</code>
                     {f.value && <span className="text-[9px] text-zinc-500 dark:text-zinc-400">: <span className="font-mono">{f.value}</span></span>}
+                    {f.maxLength != null && <span className="text-[7px] font-mono text-zinc-300 dark:text-zinc-600">≤{f.maxLength}</span>}
                     <span className="text-[7px] font-mono text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-700 px-0.5 rounded">{f.type}</span>
                   </div>
                 ))}
+              </div>
+            )}
+            {api.fields.length > 0 && activeMethod === 'GET' && (
+              <div className="pt-2 border-t border-zinc-100 dark:border-zinc-700/50 mt-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] text-zinc-400 dark:text-zinc-500">Generar registros aleatorios:</span>
+                  <input type="number" min={1} max={20} value={genCount} onChange={(e) => setGenCount(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
+                    className="w-12 bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 rounded-md px-1.5 py-0.5 text-[10px] font-mono text-zinc-600 dark:text-zinc-300 outline-none text-center" />
+                  <span className="text-[9px] text-zinc-400">registros (máx 20)</span>
+                  <button onClick={() => {
+                    const firstNames = ['Alice','Bob','Charlie','Diana','Eve','Frank','Grace','Hank','Ivy','Jack']
+                    const lastNames = ['Smith','Jones','Garcia','Lee','Kim','Brown','Chen','Patel','Wang','Lopez']
+                    const domains = ['gmail.com','outlook.com','corp.io','demo.org','test.io']
+                    const rows: Record<string, string>[] = []
+                    for (let i = 0; i < genCount; i++) {
+                      const row: Record<string, string> = {}
+                      for (const f of api.fields) {
+                        if (f.type === 'int') row[f.name] = String(Math.floor(Math.random() * 1000) + 1)
+                        else if (f.type === 'float') row[f.name] = (Math.random() * 10000).toFixed(2)
+                        else if (f.type === 'bool') row[f.name] = Math.random() > 0.5 ? 'true' : 'false'
+                        else if (f.name.toLowerCase().includes('email')) row[f.name] = `${firstNames[i % firstNames.length].toLowerCase()}@${domains[i % domains.length]}`
+                        else if (f.name.toLowerCase().includes('name') || f.name.toLowerCase().includes('nombre')) row[f.name] = `${firstNames[i % firstNames.length]} ${lastNames[i % lastNames.length]}`
+                        else {
+                          const val = `${f.name}_${i + 1}`
+                          row[f.name] = f.maxLength ? val.slice(0, f.maxLength) : val
+                        }
+                      }
+                      rows.push(row)
+                    }
+                    onSetSampleData(rows)
+                  }} className="px-2 py-1 rounded-md text-[9px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] transition-all">Generar</button>
+                </div>
               </div>
             )}
           </div>

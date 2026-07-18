@@ -9,105 +9,50 @@ npm run tauri build  # Release — auto-runs npm run build
 npm run preview      # vite preview
 npm run tauri        # pass-thru to tauri CLI
 ```
-No lint/test/format/codegen scripts. `noUnusedLocals` + `noUnusedParameters` in tsconfig — `tsc` fails on unused imports.
+No lint/test/format/codegen. `noUnusedLocals` + `noUnusedParameters` in tsconfig — `tsc` fails on unused imports. `src-tauri/` excluded from Vite watch (vite.config.ts:21).
 
 ## Stack
-- **Frontend** (`src/`): React 18 + TS + Vite 5 + TailwindCSS 3 (darkMode `class`, emerald focus rings, custom thin scrollbar). Font: Geist (Google Fonts in `index.html`).
+- **Frontend** (`src/`): React 18 + Vite 5 + TailwindCSS 3 darkMode `class` + Geist font (Google Fonts in `index.html`). No router — screen switching via `appStore.screen: onboarding|auth|main|settings` (`src/store/appStore.ts`).
 - **Backend** (`src-tauri/`): Rust crate `api-flow`, lib `api_flow_lib`. Tauri v2 + axum 0.7 (mock/OAuth) + reqwest 0.12 (rustls-tls).
-- **State** (5 Zustand stores): `appStore` (routing, `screen: onboarding|auth|main|settings`), `flowStore` (undo/redo, max 50 snapshots), `execStore` (loading/responses), `authStore` (user session), `aiStore` (provider `local|gemini|openai`, apiKey). Re-exported: `useAppStore` from `store/index.ts`.
-- **Entry**: `src/main.tsx` → `ErrorBoundary` → `App` → screen switch via `appStore.screen`. Session check and `registerCloseHandler` in `App.tsx`.
-- **Flow**: `@xyflow/react` v12 — 2 node types (`url`, `method`), 1 edge type (`animated`). Registration: `src/components/nodes/index.ts`, `src/components/edges/index.ts`. `ReactFlowProvider` inside `MainApp.tsx` (not at App level). Keyboard: Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo, Delete/Backspace removes selected node.
-- **Auth**: Appwrite v26 SDK. Email/password or OAuth (Google, GitHub). Guest mode skips auth; `AuthGuard` blocks premium features.
-- **No router**: Screen switching via `appStore.screen` — no `<Routes>`/`<Router>`.
-- **`.env.local`**: OAuth secrets required (not committed, in `.gitignore`): `VITE_GITHUB_CLIENT_ID`, `VITE_GITHUB_CLIENT_SECRET`, `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_CLIENT_SECRET`.
-- **DB**: Appwrite `greq_db` — collections `historial` (20 entries), `mock_apis` (20 max). Per-user document perms. Guest fallback: `localStorage('greq-history')`, `localStorage('greq-mock-apis')`.
-- **GitHubSection**: Sidebar panel. Two empty-state buttons: paste repo URL → `importFromGithub`, or connect GitHub OAuth → fetch repos → checkbox picker → import selected. Token stored in `localStorage('greq-github-token')` and used by `guessRoutes` via `authHeaders()` for API auth.
-- **Route detection** (`src/lib/github.ts`): `importFromGithub` → tries OpenAPI specs → `guessRoutes` fetches full git tree via API, filters code files, applies per-extension regex patterns (JS/TS: `router.get('/path')`, Python: `@router.get('/path')` + `@app.route('/path')`, Rust: `#[get("/path")]`, Go: `router.GET("/path")`). Max 30 files, skips `node_modules/`, deduplicates, no fallback endpoints.
+- **State** (7 Zustand stores): `appStore`, `authStore`, `flowStore` (undo/redo, 50 snapshots max), `execStore` (loading/responses), `aiStore`, `envStore`, `envStore`. Re-exported: `useAppStore` from `store/index.ts`.
+- **Flow**: `@xyflow/react` v12 — 2 node types (`url`, `method`), 1 edge type (`animated`). Registration: `src/components/nodes/index.ts`, `src/components/edges/index.ts`. `ReactFlowProvider` inside `MainApp.tsx`. Keyboard: Ctrl+Z undo, Ctrl+Shift+Z/Y redo, Delete/Backspace removes selected node.
+- **Auth**: Appwrite v26 SDK. Endpoint `https://nyc.cloud.appwrite.io/v1`, project `6a498aae000bdc5c653d`, DB `greq_db` (collections `historial` 20 entries, `mock_apis` 20 max). Guest fallback: `localStorage('greq-history')`, `localStorage('greq-mock-apis')`.
+- **`.env.local`** (not committed): `VITE_GITHUB_CLIENT_ID`, `VITE_GITHUB_CLIENT_SECRET`, `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_CLIENT_SECRET`.
 
-## Node Data & Execution
-- **URL node data**: `{ url, title, params:[], headers:[] }` — sidecar data, no request sent.
-- **Method node data**: `{ method, headers, body, bodyType, auth, authValue, repeatCount }` (default 1). Runs actual HTTP request.
-- **Sidebar drag keys** (HTML5 native Drag API, see `NodeCard.tsx`): `'url'`, `'get'`, `'post'`, `'put'`, `'patch'`, `'delete'`, `'update'`.
-- **Execution**: walks edges backward through URL nodes for `$prev` resolution. `repeatCount` runs N times (responses stored in `responses[]`). Connections: URL(source) → Method(target); Method(source) → Method(target) for chaining.
-- **Save/Load**: `{ nodes, edges }` JSON download / file input `accept=".json"`.
-- **Auto-save**: History auto-saves when URL node title is set (to Appwrite or localStorage).
-- **Node colors** (`src/constants.ts`): url/GET=emerald, POST=blue, PUT=orange, PATCH=purple, DELETE=red, UPDATE=yellow.
+## IPC (9 commands in `src-tauri/src/lib.rs:170-179`)
+All Rust structs `#[serde(rename_all = "camelCase")]`.
+
+- `make_request` — auto-prepend `http://` if no scheme, 30s timeout, maps UPDATE→PUT
+- `start_mock_server` — axum mock on `127.0.0.1:{port}` (random if 0). `MockConfig`: `{ path, methods, status, headers, body, port, delayMs, methodConfigs, fields, sampleData }`. Smart per-method handler: GET returns array/list or single (/:id), POST merges body+fields → 201+gen ID, DELETE → `{deleted:true,id}`, UPDATE/PUT/PATCH → `{updated:true,id,data}`. Fields typed: `string`/`int`/`bool`.
+- Dynamic templates (Rust `resolve_dynamic`): `{{$uuid}}`, `{{$timestamp}}`, `{{$randomInt}}`, `{{$randomBoolean}}`, `{{$randomName}}`, `{{$randomEmail}}`, `{{$randomWord}}`, `{{$randomNumber(min,max)}}`.
+- `start_oauth_webview(url)` — Tauri WebviewWindow for Appwrite OAuth, intercepts `cloud.appwrite.io/console/auth/oauth2/success`
+- `login_with_github` / `login_with_google` — backend OAuth (ephemeral axum → browser → callback → code exchange → user fetch). Frontend creates Appwrite user with deterministic password: `greq_oauth_` + `btoa(email + ':greq').slice(0,16)`.
 
 ## Variable Syntax (`src/utils/resolveVariables.ts`)
 ```
 {{$prev.body.path.to.field}}  — JSON body path from previous method
 {{$prev.body}}                — full body string
-{{$prev.headers.Header-Name}} — case-insensitive header lookup
+{{$prev.headers.Header-Name}} — case-insensitive lookup
 {{$prev.status}}              — status code
 {{$prev.statusText}}          — status text
 {{nodeId.body.path}}          — explicit node reference by ID
-{{varName}}                   — env variable from active profile (via envStore)
+{{varName}}                   — env variable from active profile
 ```
 
-## Backend IPC (`src-tauri/src/lib.rs` — 9 registered commands)
-All Rust structs `#[serde(rename_all = "camelCase")]` — JS sends `bodyType`, `authType`, `port`, etc.
-
-- `make_request` — auto-prepends `http://` if no scheme, 30s timeout, maps UPDATE→PUT
-- `start_mock_server` — axum mock on `127.0.0.1:{port}` (random if 0). `MockConfig`: `{ path, methods, status, headers, body, port, delayMs, methodConfigs, fields, sampleData }`. Smart per-method handler: GET returns array (no ID) or single (/:id), POST merges body+fields → 201+gen ID, DELETE → `{deleted:true,id}`, UPDATE/PUT/PATCH → `{updated:true,id,data}`. Fields typed schema (`string`/`int`/`bool`).
-- **Dynamic templates** (`mock.rs:resolve_dynamic`): resolves `{{$uuid}}`, `{{$timestamp}}`, `{{$randomInt}}`, `{{$randomBoolean}}`, `{{$randomName}}`, `{{$randomEmail}}`, `{{$randomWord}}`, `{{$randomNumber(min,max)}}` in response bodies.
-- **Inspect** at `GET /__inspect` — last request (non-consuming).
-- **History** at `GET /__history` — accumulated `RequestLog[]` (max 50), non-destructive reads.
-- `stop_mock_server(id)` / `stop_all_mock_servers` — graceful via oneshot channel
-- `start_oauth_webview(url)` — creates Tauri WebviewWindow for Appwrite OAuth, intercepts `cloud.appwrite.io/console/auth/oauth2/success`
-- `start_oauth_server` / `wait_oauth_callback` — legacy (replaced by webview for Appwrite)
-- `login_with_github(clientId, clientSecret)` / `login_with_google(clientId, clientSecret)` — backend-driven OAuth (browser → callback → code exchange → user fetch)
-
-## OAuth (Appwrite Cloud — Fixed via Webview)
-Appwrite cloud v26 ignores custom redirect URLs and sends users to `cloud.appwrite.io/console/auth/oauth2/success?key=...&secret=...` instead of our callback server. **Fix**: `start_oauth_webview` (Rust) creates a Tauri `WebviewWindow`, navigates to the Appwrite OAuth URL, and uses `on_navigation` to intercept the console success URL, extracting `key`/`secret` from query params. Replaces the old `start_oauth_server` + `openUrl` + `wait_oauth_callback` flow in `AuthPage.tsx`.
-
-## Direct OAuth (GitHub & Google — via Browser)
-`login_with_github` and `login_with_google` (Rust, `auth.rs`) handle OAuth entirely in the backend: starts ephemeral axum server → opens system browser to OAuth URL → receives callback → exchanges code for token → fetches email/name → returns `{ email, name }`. Frontend then creates/logins an Appwrite user with deterministic derived password (`greq_oauth_` + `btoa(email + ':greq').slice(0,16)`). OAuth credentials in `.env.local` (not committed).
-
-## AI (`src/lib/ai.ts`, `src/store/aiStore.ts`, `src/components/AiChat.tsx`)
-Two modes: **local** (offline template generator — keyword matching detects entities like `user`/`product`/`task`, generates mock API configs or flow JSON) and **external** (Gemini 2.0 Flash or OpenAI GPT-4o-mini — prompts for JSON, parsed via `extractJson` stripping ``` fences). Provider/apiKey configurable in **SettingsPage**. `aiStore` persists provider to `localStorage('greq-ai-provider')`.
-
-## Close Handler (`src/lib/closeHandler.ts`)
-Registered in `App.tsx` mount. Intercepts window close when mock servers are running — shows dialog with "stop all / keep running / cancel". Uses `@tauri-apps/api/window` `onCloseRequested`.
-
-## Mock API Features
-- **OpenAPI import** (`src/lib/openapi.ts`): JSON + simple YAML parser, extracts paths/methods/fields/sample data, creates `MockApiItem[]`. YAML parser is indent-based (no multi-line strings, arrays, or anchors).
-- **Dynamic templates**: 8 template types resolved in Rust (`resolve_dynamic`). Frontend hints in `MockApiEditor.tsx` with click-to-insert buttons.
-- **Request history**: `__history` endpoint accumulates last 50 requests with method/path/body. Non-destructive (also has `__inspect` for single last request).
-- **Bulk sample data**: "Generar 5 filas" button in create modal — smart per-field type (email, name, int, bool).
-- **Per-method response bodies**: `methodBodies` overrides per-method across GET/POST/PUT/PATCH/DELETE within the same API.
-
-## Environment Variables (`src/store/envStore.ts`)
-- 3 default profiles: dev/staging/prod, persisted to `localStorage('greq-env-profiles')`.
-- `useEnvStore` Zustand store: `upsertVar`, `removeVar`, `renameProfile`, `addProfile`, `removeProfile`.
-- `getActiveVars()` returns vars for the selected profile (persisted in `localStorage('greq-env-active')`).
-- `resolveVariables.ts` accepts 4th param `envVars: Record<string, string>` — resolves `{{varName}}` before response lookup.
-- **EnvPanel** (`src/components/EnvPanel.tsx`): sidebar panel with profile selector + key/value editor.
-
-## Code Export (`src/lib/codegen.ts`, `src/components/ExportCodePanel.tsx`)
-- 4 languages: cURL, Python (`requests`), JavaScript (`fetch`), Rust (`reqwest`).
-- Groups: walks URL→Method edges from flow, one group per method chain.
-- `resolveVars: true` by default — reads env vars from `useEnvStore` and replaces `{{varName}}`.
-- `ExportCodePanel` sidebar: language selector, resolve toggle, copy/download buttons.
-- `countGroups()` for empty-state detection.
-
-## Remaining Improvements (Generate API Flow)
-- **OpenAPI YAML parser**: Current indent-based parser fails on multi-line strings, arrays, `$ref`, `allOf`/`oneOf`, anchors, multiple documents. Needs real YAML library or serde_yaml-based Rust command.
-- **No per-route method config on import**: Imported APIs only get one `responseBody` for all methods. After import, user must manually configure GET vs POST responses in editor.
-- **No response validation**: Mock server doesn't validate request body/params against schema. No schema generation from OpenAPI `requestBody` or `parameters`.
-- **No pagination**: Mock GET lists always return all records. No `?page=1&limit=10` style pagination, no `X-Total-Count` header.
-- **No conditional responses**: Can't define "if field=X return status 400" or random error simulation (status 500 every 3rd request).
-- **Bulk sample count hardcoded**: "Generar 5 filas" is hardcoded to 5. No "generar N filas" input.
-- **No delayed/dynamic field values**: Field default values are static; no `$uuid`/`$timestamp` in field default values.
-- **No WebSocket mock**: Only HTTP mock, no WebSocket endpoint for real-time testing.
-- **No server-sent events (SSE)**: No streaming endpoint support.
-- **No cURL paste import**: User can't paste a cURL command to create a mock API.
-- **Import from HAR/Postman/Insomnia**: Only OpenAPI is supported as import format.
-- **No response filtering/sorting**: `?fields=id,name` or `?sort=name:desc` not supported.
-- **History panel**: No frontend UI button to fetch/display `__history` (only `__inspect` modal is wired).
-- **No rate limiting / throttling**: Mock server always responds immediately (except `delayMs`). Can't simulate 429 or timeout.
+## Node Data
+- **URL node**: `{ url, title, params:[], headers:[] }` — sidecar, no request sent
+- **Method node**: `{ method, headers, body, bodyType, auth, authValue, repeatCount }` (default 1). Walks edges backward for `$prev` resolution. Connections: URL(source)→Method(target); Method(source)→Method(target)
+- **Sidebar drag keys** (HTML5 native Drag API, `NodeCard.tsx`): `'url'`, `'get'`, `'post'`, `'put'`, `'patch'`, `'delete'`, `'update'`
 
 ## Known Issues
-- **invoke hangs when Tauri backend not ready**: `window.__TAURI_INTERNALS__` set by webview preload before Rust backend is ready. `invoke` never rejects. Wrapper: `invokeWithTimeout()` (4s) in `src/components/MockApi.tsx:11-15`. Reuse this pattern for any `invoke` that might race backend init.
-- **Mock servers don't persist between sessions**: Tokio processes die on app close. Tracked in `localStorage('greq-running-servers')`. Banner on reopen asks manual restore.
-- **Axum catch-all**: axum 0.7 uses `/*path`, not `/{*path}`. Done in `mock.rs:379`.
-- **Vite strict port**: Port 1420. HMR on 1421 if `TAURI_DEV_HOST` is set. `src-tauri/` excluded from Vite watch.
+- **invoke hangs when Tauri backend not ready**: `invoke` never rejects if backend not ready. Use `invokeWithTimeout()` (4s) from `MockApi.tsx:12-15` for any `invoke` racing backend init.
+- **Mock servers don't persist between sessions**: Tokio processes die on app close. Tracked in `localStorage('greq-running-servers')`.
+- **Axum catch-all**: axum 0.7 uses `/*path`, not `/{*path}` (`mock.rs:540`).
+
+## Limitations (Important)
+- OpenAPI YAML parser indent-based — no multi-line strings, arrays, `$ref`, anchors (`src/lib/openapi.ts:51-84`)
+- No per-route method config on import — all methods share one responseBody
+- Mock server lacks pagination, rate limiting, conditional responses, WebSocket, SSE
+- cURL/HAR/Postman/Insomnia import unsupported
+- `__history` endpoint exists (`GET /__history`) but no frontend UI button
+- No response validation or schema generation

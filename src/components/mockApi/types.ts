@@ -11,6 +11,7 @@ export interface FieldDef {
   name: string
   type: string
   value?: string
+  maxLength?: number
 }
 
 export interface MockApiItem {
@@ -33,7 +34,7 @@ export interface MockApiItem {
 
 export const methods = ['GET', 'POST', 'DELETE', 'UPDATE'] as const
 export const STORAGE_KEY = 'greq-mock-apis'
-export const FIELD_TYPES = ['string', 'int', 'bool'] as const
+export const FIELD_TYPES = ['string', 'int', 'bool', 'float'] as const
 
 export const methodColors: Record<string, { dot: string; badge: string; text: string }> = {
   GET:    { dot: '#10b981', badge: '#d1fae5', text: '#059669' },

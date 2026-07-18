@@ -175,10 +175,11 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
         ? JSON.stringify(cleanSampleData.map((row, i) => ({ id: i + 1, ...Object.fromEntries(formTempFields.map((f) => {
             let val: any = row[f.name] ?? ''
             if (f.type === 'int') val = Number(row[f.name]) || 0
+            else if (f.type === 'float') val = Number(row[f.name]) || 0
             else if (f.type === 'bool') val = row[f.name] === 'true' || row[f.name] === '1'
             return [f.name, val]
           })) })), null, 2)
-        : defaultBody,
+        : JSON.stringify({ message: 'api vacía', hint: 'Agregá datos de ejemplo en el editor' }, null, 2),
     }
     setMockApis((a) => [...a, api])
     setShowModal(false)
@@ -203,6 +204,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
   const setMethodStatusCode = (apiId: string, method: string, code: number) => setMockApis((a) => a.map((x) => x.id === apiId ? { ...x, methodBodies: { ...x.methodBodies, [method]: { ...(x.methodBodies[method] ?? { responseBody: x.responseBody, responseHeaders: x.responseHeaders }), statusCode: code } } } : x))
   const setMethodResponseBody = (apiId: string, method: string, body: string) => setMockApis((a) => a.map((x) => x.id === apiId ? { ...x, methodBodies: { ...x.methodBodies, [method]: { ...(x.methodBodies[method] ?? { statusCode: x.statusCode, responseHeaders: x.responseHeaders }), responseBody: body } } } : x))
   const setMethodResponseHeaders = (apiId: string, method: string, headers: { key: string; value: string }[]) => setMockApis((a) => a.map((x) => x.id === apiId ? { ...x, methodBodies: { ...x.methodBodies, [method]: { ...(x.methodBodies[method] ?? { statusCode: x.statusCode, responseBody: x.responseBody }), responseHeaders: headers } } } : x))
+  const setSampleData = (apiId: string, data: Record<string, string>[]) => setMockApis((a) => a.map((x) => x.id === apiId ? { ...x, sampleData: data, responseBody: JSON.stringify(data.map((row, i) => ({ id: i + 1, ...row })), null, 2) } : x))
 
   const fetchInspect = async (api: MockApiItem) => {
     setInspectLoading(true)
@@ -337,6 +339,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
             onSetMethodStatusCode={(m, c) => setMethodStatusCode(activeApi.id, m, c)}
             onSetMethodResponseBody={(m, b) => setMethodResponseBody(activeApi.id, m, b)}
             onSetMethodResponseHeaders={(m, h) => setMethodResponseHeaders(activeApi.id, m, h)}
+            onSetSampleData={(d) => setSampleData(activeApi.id, d)}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center">
