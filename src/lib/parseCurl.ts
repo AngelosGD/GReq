@@ -26,15 +26,20 @@ export function parseCurl(input: string): { method: string; url: string; headers
     const t = tokens[i]
     if (t === 'curl') { i++; continue }
     if (t === '-X' || t === '--request') { method = tokens[i + 1]?.toUpperCase() || 'GET'; i += 2; continue }
-    if (t === '-H' || t === '--header') { const h = tokens[i + 1] || ''; const sep = h.indexOf(':'); if (sep > 0) headers.push({ key: h.slice(0, sep).trim(), value: h.slice(sep + 1).trim() }); i += 2; continue }
-    if (t === '-d' || t === '--data' || t === '--data-raw') { body = (body ? body + '&' : '') + (tokens[i + 1] || ''); if (method === 'GET') method = 'POST'; i += 2; continue }
+    if (t === '-H' || t === '--header') { const h = tokens[i + 1] ?? ''; const sep = h.indexOf(':'); if (sep > 0) headers.push({ key: h.slice(0, sep).trim(), value: h.slice(sep + 1).trim() }); i += 2; continue }
+    if (t === '-d' || t === '--data' || t === '--data-raw') { body = (body ? body + '&' : '') + (tokens[i + 1] ?? ''); if (method === 'GET') method = 'POST'; i += 2; continue }
     if (t.startsWith('http://') || t.startsWith('https://')) { url = t; i++; continue }
     i++
   }
 
   if (!url) return null
 
-  const parsed = new URL(url)
-  const path = parsed.pathname === '/' ? '' : parsed.pathname.replace(/^\//, '')
+  let path = ''
+  try {
+    const parsed = new URL(url)
+    path = parsed.pathname === '/' ? '' : parsed.pathname.replace(/^\//, '')
+  } catch {
+    return null
+  }
   return { method, url: path, headers, body }
 }

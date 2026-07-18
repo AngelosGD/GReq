@@ -1,4 +1,4 @@
-import { memo, useState, useEffect } from 'react'
+import { memo, useState } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import type { Node } from '@xyflow/react'
 import type { NodeDataUrl } from '../../types'
@@ -7,9 +7,8 @@ type UrlNodeType = Node<Partial<NodeDataUrl>>
 
 function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
   const { updateNodeData } = useReactFlow()
-  const [url, setUrl] = useState(data.url ?? '')
+  const url = data.url ?? ''
   const [focused, setFocused] = useState(false)
-  useEffect(() => { setUrl(data.url ?? '') }, [data.url])
 
   return (
     <div
@@ -59,10 +58,7 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
           </svg>
           <input
             value={url}
-            onChange={(e) => {
-              setUrl(e.target.value)
-              updateNodeData(id, { url: e.target.value })
-            }}
+            onChange={(e) => updateNodeData(id, { url: e.target.value })}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder="https://api.ejemplo.com"
@@ -70,10 +66,7 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
           />
           {url && (
             <button
-              onClick={() => {
-                setUrl('')
-                updateNodeData(id, { url: '' })
-              }}
+              onClick={() => updateNodeData(id, { url: '' })}
               className="nodrag p-0.5 rounded text-zinc-300 hover:text-zinc-500 hover:bg-zinc-100 transition-colors"
             >
               <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>

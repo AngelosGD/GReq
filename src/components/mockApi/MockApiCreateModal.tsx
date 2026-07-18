@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { FieldDef, methods, methodColors, FIELD_TYPES } from './types'
 import { generateMockApi } from '../../lib/ai'
 import { generateRows } from '../../lib/generateSampleData'
@@ -28,14 +28,6 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
   const [aiLoading, setAiLoading] = useState(false)
   const [curlInput, setCurlInput] = useState('')
   const [showCurlImport, setShowCurlImport] = useState(false)
-
-  useEffect(() => {
-    if (formTempFields.length > 0 && formSampleData.length === 0) {
-      const row: Record<string, string> = {}
-      for (const f of formTempFields) row[f.name] = f.value ?? ''
-      setFormSampleData([row])
-    }
-  }, [formTempFields])
 
   const resetFormFieldTypes = (fields: { name: string; type: string }[]) => {
     if (fields.length > 0) setFormNewFieldType(fields[fields.length - 1].type)
@@ -71,7 +63,10 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
 
   const handleAddField = () => {
     if (!formNewFieldName.trim()) return
-    setFormTempFields((p) => [...p, { name: formNewFieldName.trim(), type: formNewFieldType, value: formNewFieldValue || undefined, maxLength: formNewFieldMaxLen ? Number(formNewFieldMaxLen) : undefined }])
+    const newField: FieldDef = { name: formNewFieldName.trim(), type: formNewFieldType, value: formNewFieldValue || undefined, maxLength: formNewFieldMaxLen ? Number(formNewFieldMaxLen) : undefined }
+    const nextFields = [...formTempFields, newField]
+    setFormTempFields(nextFields)
+    setFormSampleData((curr) => curr.length === 0 ? [{ ...Object.fromEntries(nextFields.map((f) => [f.name, f.value ?? ''])) }] : curr)
     setFormNewFieldName('')
     setFormNewFieldValue('')
     setFormNewFieldMaxLen('')
@@ -80,14 +75,16 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
 
   const handleBulkFields = (text: string) => {
     const parts = text.split(',').map((s) => s.trim()).filter(Boolean)
-    const newFields: FieldDef[] = []
+    const parsed: FieldDef[] = []
     for (const part of parts) {
       const [rawName, rawType] = part.split(':').map((s) => s.trim())
       if (!rawName) continue
       const type = FIELD_TYPES.includes(rawType as any) ? rawType : 'string'
-      newFields.push({ name: rawName, type })
+      parsed.push({ name: rawName, type })
     }
-    setFormTempFields((p) => [...p, ...newFields])
+    const nextFields = [...formTempFields, ...parsed]
+    setFormTempFields(nextFields)
+    setFormSampleData((curr) => curr.length === 0 ? [{ ...Object.fromEntries(nextFields.map((f) => [f.name, f.value ?? ''])) }] : curr)
   }
 
   const handleApplyTemplate = (template: { name: string; path: string; methods: string[]; fields: FieldDef[] }) => {
@@ -95,6 +92,7 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
     setFormPath(template.path)
     setFormMethods(template.methods)
     setFormTempFields(template.fields)
+    setFormSampleData((curr) => curr.length === 0 ? [{ ...Object.fromEntries(template.fields.map((f) => [f.name, f.value ?? ''])) }] : curr)
     setFormErrors({})
   }
 
@@ -109,6 +107,7 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
         const bodyObj = JSON.parse(parsed.body)
         const fields: FieldDef[] = Object.keys(bodyObj).map((k) => ({ name: k, type: typeof bodyObj[k] === 'number' ? 'int' : 'string' }))
         setFormTempFields(fields)
+        setFormSampleData((curr) => curr.length === 0 ? [{ ...Object.fromEntries(fields.map((f) => [f.name, f.value ?? ''])) }] : curr)
       } catch { setFormTempFields([]) }
     }
     setShowCurlImport(false)

@@ -204,17 +204,14 @@ async function guessRoutes(owner: string, repo: string): Promise<GitHubEndpoint[
         if (res.ok) {
           const json = await res.json()
           activeBranch = branch
-          console.log(`[guessRoutes] tree OK, branch=${branch}, blobs=${json.tree?.filter((t: any) => t.type==='blob').length ?? 0}`)
           return json.tree ?? []
         }
       } catch { /* try next */ }
     }
-    console.log(`[guessRoutes] tree FAILED for both main/master`)
     return []
   })()
 
   if (!activeBranch) {
-    console.log(`[guessRoutes] no active branch, aborting`)
     return endpoints
   }
 
@@ -226,13 +223,7 @@ async function guessRoutes(owner: string, repo: string): Promise<GitHubEndpoint[
     return !!ext && CODE_EXTS.has(ext)
   })
 
-  console.log(`[guessRoutes] code files found: ${codeFiles.length}`)
-
   codeFiles.sort((a: any, b: any) => routeFileScore(b.path) - routeFileScore(a.path))
-
-  if (codeFiles.length > 0) {
-    console.log(`[guessRoutes] top files:`, codeFiles.slice(0, 5).map((f: any) => `${f.path} (score=${routeFileScore(f.path)})`))
-  }
 
   for (const item of codeFiles) {
     if (count >= MAX_FILES) break
@@ -242,9 +233,6 @@ async function guessRoutes(owner: string, repo: string): Promise<GitHubEndpoint[
       if (!res.ok) continue
       const ext = (item.path ?? '').split('.').pop()?.toLowerCase()
       const routes = extractRoutesFromContent(await res.text(), ext ?? '')
-      if (routes.length > 0) {
-        console.log(`[guessRoutes] found ${routes.length} routes in ${item.path}:`, JSON.stringify(routes))
-      }
       for (const { method, path } of routes) {
         const key = `${method}:${path}`
         if (!seen.has(key)) {
@@ -255,6 +243,5 @@ async function guessRoutes(owner: string, repo: string): Promise<GitHubEndpoint[
     } catch { /* skip */ }
   }
 
-  console.log(`[guessRoutes] total endpoints found: ${endpoints.length}, files scanned: ${count}`)
   return endpoints
 }

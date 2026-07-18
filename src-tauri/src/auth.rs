@@ -124,8 +124,10 @@ pub async fn start_oauth_webview(
                     nav_url.query_pairs().into_owned().collect();
                 let user_id = params.get("key").cloned().unwrap_or_default();
                 let secret = params.get("secret").cloned().unwrap_or_default();
-                if let Some(sender) = callback.lock().unwrap().take() {
-                    let _ = sender.send(OAuthCallback { user_id, secret });
+                if let Ok(mut guard) = callback.lock() {
+                    if let Some(sender) = guard.take() {
+                        let _ = sender.send(OAuthCallback { user_id, secret });
+                    }
                 }
                 return false;
             }
@@ -305,11 +307,11 @@ pub async fn login_with_google(
     client_secret: String,
 ) -> Result<OAuthUserInfo, AppError> {
     let state = random_state(16);
-    let port: u16 = 14211;
 
-    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port))
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .map_err(|e| AppError::Server(format!("No se pudo iniciar servidor: {}", e)))?;
+    let port = listener.local_addr().map_err(|e| AppError::Server(format!("Error al obtener puerto: {}", e)))?.port();
 
     let (code_tx, code_rx) = tokio::sync::oneshot::channel::<String>();
     let code_tx = Arc::new(tokio::sync::Mutex::new(Some(code_tx)));

@@ -119,7 +119,14 @@ function genPython(g: CodegenGroup): string {
     if (g.bodyType === 'form') {
       kwargs.push(`data=${quote(g.body)}`)
     } else {
-      try { JSON.parse(g.body); kwargs.push(`json=${g.body}`) }
+      try {
+        const parsed = JSON.parse(g.body)
+        const pyBody = JSON.stringify(parsed, null, 2)
+          .replace(/: true\b/g, ': True')
+          .replace(/: false\b/g, ': False')
+          .replace(/: null\b/g, ': None')
+        kwargs.push(`json=${pyBody}`)
+      }
       catch { kwargs.push(`data=${quote(g.body)}`) }
     }
   }
@@ -197,8 +204,8 @@ function genRust(g: CodegenGroup): string {
   if (g.auth === 'Bearer' && g.authValue) {
     reqLine += `\n    .bearer_auth("${g.authValue}")`
   } else if (g.auth === 'Basic' && g.authValue) {
-    const [user, pass] = g.authValue.split(':')
-    reqLine += `\n    .basic_auth("${user ?? ''}", Some("${pass ?? ''}"))`
+    const [basicUser, basicPass] = g.authValue.split(':')
+    reqLine += `\n    .basic_auth("${basicUser ?? ''}", ${basicPass != null ? `Some("${basicPass}")` : 'None::<String>'})`
   }
 
   if (g.body && method !== 'get') {

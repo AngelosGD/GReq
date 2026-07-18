@@ -193,7 +193,6 @@ fn resolve_dynamic(body: &str) -> String {
         "$randomName",
         "$randomEmail",
         "$randomWord",
-        "$randomNumber(",
     ];
     let mut result = body.to_string();
     for pat in &patterns {
@@ -203,18 +202,17 @@ fn resolve_dynamic(body: &str) -> String {
             result = result.replace(&template, &resolved);
         }
     }
-    // Handle $randomNumber(min,max) which needs special closing brace handling
     loop {
         let start = result.find("{{$randomNumber(");
         match start {
             Some(s) => {
-                let after = &result[s + 2..];
+                let after = &result[s..];
                 let end = after.find("}}");
                 match end {
                     Some(e) => {
-                        let inner = &after[..e];
+                        let inner = &after[2..e];
                         let resolved = dynamic_val(inner);
-                        result.replace_range(s..s + 2 + e + 2, &resolved);
+                        result.replace_range(s..s + e + 2, &resolved);
                     }
                     None => break,
                 }

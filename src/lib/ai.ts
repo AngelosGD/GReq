@@ -168,39 +168,49 @@ function templateFlow(description: string) {
 async function callExternalAPI(prompt: string): Promise<string> {
   const { provider, apiKey } = useAIStore.getState()
 
-  if (provider === 'gemini' && apiKey) {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      },
-    )
-    const raw = await res.text()
-    if (!res.ok) throw new Error(`Gemini error ${res.status}: ${raw.slice(0, 200)}`)
-    try {
-      const data = JSON.parse(raw)
-      return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-    } catch {
-      throw new Error(`Gemini devolvió HTML. Revisá tu API key o probá con Local: ${raw.slice(0, 200)}`)
-    }
-  }
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 15000)
+  const signal = controller.signal
 
-  if (provider === 'openai' && apiKey) {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }] }),
-    })
-    const raw = await res.text()
-    if (!res.ok) throw new Error(`OpenAI error ${res.status}: ${raw.slice(0, 200)}`)
-    try {
-      const data = JSON.parse(raw)
-      return data.choices?.[0]?.message?.content ?? ''
-    } catch {
-      throw new Error(`OpenAI devolvió HTML. Revisá tu API key o probá con Local: ${raw.slice(0, 200)}`)
+  try {
+    if (provider === 'gemini' && apiKey) {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
+        {
+          signal,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': apiKey },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        },
+      )
+      const raw = await res.text()
+      if (!res.ok) throw new Error(`Gemini error ${res.status}: ${raw.slice(0, 200)}`)
+      try {
+        const data = JSON.parse(raw)
+        return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+      } catch {
+        throw new Error(`Gemini devolvió HTML. Revisá tu API key o probá con Local: ${raw.slice(0, 200)}`)
+      }
     }
+
+    if (provider === 'openai' && apiKey) {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        signal,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }] }),
+      })
+      const raw = await res.text()
+      if (!res.ok) throw new Error(`OpenAI error ${res.status}: ${raw.slice(0, 200)}`)
+      try {
+        const data = JSON.parse(raw)
+        return data.choices?.[0]?.message?.content ?? ''
+      } catch {
+        throw new Error(`OpenAI devolvió HTML. Revisá tu API key o probá con Local: ${raw.slice(0, 200)}`)
+      }
+    }
+  } finally {
+    clearTimeout(timeout)
   }
 
   return ''

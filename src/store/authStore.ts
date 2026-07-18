@@ -1,9 +1,15 @@
 import { create } from 'zustand'
 
+export interface AuthUser {
+  $id: string
+  email: string
+  name?: string
+}
+
 interface AuthStore {
-  user: any | null
+  user: AuthUser | null
   checked: boolean
-  setUser: (user: any | null) => void
+  setUser: (user: AuthUser | null) => void
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
