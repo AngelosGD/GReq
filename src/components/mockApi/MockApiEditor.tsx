@@ -24,8 +24,9 @@ interface Props {
   onStartApi: () => void
   onStopApi: () => void
   onFetchInspect: () => void
-  onTestInCanvas?: (api: MockApiItem) => void
+  onFetchHistory: () => void
   onDuplicateApi: () => void
+  onTestInCanvas?: (api: MockApiItem) => void
   onExportApi: () => void
   onConfirmDelete: () => void
   onSetDelayMs: (ms: number) => void
@@ -40,7 +41,7 @@ export function MockApiEditor({
   inspectLoading,
   onSetActiveMethod, onSetEditName, onSetEditPath, onSetEditPort, onSetEditMethods,
   onSaveEditing, onCancelEditing, onStartEditing,
-  onStartApi, onStopApi, onFetchInspect, onTestInCanvas,
+  onStartApi, onStopApi, onFetchInspect, onFetchHistory, onTestInCanvas,
   onDuplicateApi, onExportApi, onConfirmDelete,
   onSetDelayMs, onSetMethodStatusCode, onSetMethodResponseBody, onSetMethodResponseHeaders,
   onSetSampleData,
@@ -163,6 +164,12 @@ export function MockApiEditor({
                     {inspectLoading ? '...' : 'Inspeccionar'}
                   </button>
                 )}
+                {api.running && (
+                  <button onClick={onFetchHistory} className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-zinc-50 dark:bg-zinc-800/30 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700/30 active:scale-[0.98] transition-all duration-150 flex items-center gap-1.5">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    Historial
+                  </button>
+                )}
                 {api.running && onTestInCanvas && (
                   <button onClick={() => onTestInCanvas(api)} className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 active:scale-[0.98] transition-all duration-150 flex items-center gap-1.5">
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
@@ -221,7 +228,7 @@ export function MockApiEditor({
               </div>
             )}
             {api.fields.length > 0 && (
-              <div className="pt-2 border-t border-zinc-100 dark:border-zinc-700/50 mt-2">
+              <div className="pt-2 border-t border-zinc-100 dark:border-zinc-700/50 mt-2 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="text-[9px] text-zinc-400 dark:text-zinc-500">Generar registros aleatorios:</span>
                   <input type="number" min={1} max={20} value={genCount} onChange={(e) => setGenCount(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
@@ -229,6 +236,29 @@ export function MockApiEditor({
                   <span className="text-[9px] text-zinc-400">registros (máx 20)</span>
                   <button onClick={() => onSetSampleData(generateRows(api.fields, genCount))} className="px-2 py-1 rounded-md text-[9px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] transition-all">Generar</button>
                 </div>
+                {api.sampleData.length > 0 && (
+                  <details className="group">
+                    <summary className="flex items-center gap-1 text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 cursor-pointer transition-colors">
+                      <svg className="w-2 h-2 group-open:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                      Editar datos ({api.sampleData.length} registros)
+                    </summary>
+                    <div className="mt-2 space-y-1">
+                      {api.sampleData.map((row, ri) => (
+                        <div key={`${ri}-${row[api.fields[0]?.name] ?? ''}`} className="flex items-center gap-1">
+                          {api.fields.map((f) => (
+                            <input key={f.name} defaultValue={row[f.name] ?? ''} onBlur={(e) => {
+                              const newData = api.sampleData.map((r, i) => i === ri ? { ...r, [f.name]: e.target.value } : r)
+                              onSetSampleData(newData)
+                            }} placeholder={f.name} className="flex-1 min-w-0 bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 rounded-md px-1.5 py-1 text-[9px] font-mono text-zinc-600 dark:text-zinc-300 outline-none focus:border-emerald-400/70 placeholder-zinc-300 dark:placeholder-zinc-500" />
+                          ))}
+                          <button onClick={() => onSetSampleData(api.sampleData.filter((_, i) => i !== ri))} className="shrink-0 w-4 h-4 flex items-center justify-center rounded text-zinc-300 dark:text-zinc-600 hover:text-red-500 transition-colors">
+                            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
               </div>
             )}
           </div>

@@ -215,6 +215,16 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
     finally { setInspectLoading(false) }
   }
 
+  const fetchHistory = async (api: MockApiItem) => {
+    try {
+      const res = await fetch(`http://localhost:${api.port}/__history`)
+      if (res.ok) {
+        const data = await res.json()
+        setInspectLog({ method: 'GET', path: '__history', body: JSON.stringify(data, null, 2) })
+      } else { alert('No hay historial disponible') }
+    } catch { alert('Error al consultar el historial') }
+  }
+
   const togglePin = (apiId: string) => setMockApis((a) => a.map((x) => x.id === apiId ? { ...x, pinned: !x.pinned } : x))
 
   const startEditing = (api: MockApiItem) => {
@@ -332,7 +342,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
             onSetEditName={setEditName} onSetEditPath={setEditPath} onSetEditPort={setEditPort} onSetEditMethods={setEditMethods}
             onSaveEditing={() => saveEditing(activeApi)} onCancelEditing={cancelEditing} onStartEditing={() => startEditing(activeApi)}
             onStartApi={() => startApi(activeApi)} onStopApi={() => stopApi(activeApi)}
-            onFetchInspect={() => fetchInspect(activeApi)} onTestInCanvas={onTestInCanvas}
+            onFetchInspect={() => fetchInspect(activeApi)} onFetchHistory={() => fetchHistory(activeApi)} onTestInCanvas={onTestInCanvas}
             onDuplicateApi={() => setDuplicateTarget(activeApi)} onExportApi={() => exportApi(activeApi)}
             onConfirmDelete={() => confirmDelete(activeApi)}
             onSetDelayMs={(ms) => setDelayMs(activeApi.id, ms)}

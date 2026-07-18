@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { FieldDef, methods, methodColors, FIELD_TYPES } from './types'
 import { generateMockApi } from '../../lib/ai'
 import { generateRows } from '../../lib/generateSampleData'
+import { parseCurl } from '../../lib/parseCurl'
 
 interface Props {
   onClose: () => void
@@ -25,6 +26,8 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [aiDescription, setAiDescription] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+  const [curlInput, setCurlInput] = useState('')
+  const [showCurlImport, setShowCurlImport] = useState(false)
 
   useEffect(() => {
     if (formTempFields.length > 0 && formSampleData.length === 0) {
@@ -73,6 +76,44 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
     setFormNewFieldValue('')
     setFormNewFieldMaxLen('')
     setFormErrors((e) => ({ ...e, fields: '' }))
+  }
+
+  const handleBulkFields = (text: string) => {
+    const parts = text.split(',').map((s) => s.trim()).filter(Boolean)
+    const newFields: FieldDef[] = []
+    for (const part of parts) {
+      const [rawName, rawType] = part.split(':').map((s) => s.trim())
+      if (!rawName) continue
+      const type = FIELD_TYPES.includes(rawType as any) ? rawType : 'string'
+      newFields.push({ name: rawName, type })
+    }
+    setFormTempFields((p) => [...p, ...newFields])
+  }
+
+  const handleApplyTemplate = (template: { name: string; path: string; methods: string[]; fields: FieldDef[] }) => {
+    setFormName(template.name)
+    setFormPath(template.path)
+    setFormMethods(template.methods)
+    setFormTempFields(template.fields)
+    setFormErrors({})
+  }
+
+  const handleImportCurl = () => {
+    const parsed = parseCurl(curlInput)
+    if (!parsed) { alert('No se pudo interpretar el comando curl'); return }
+    setFormName(`API desde cURL`)
+    setFormPath(parsed.url)
+    setFormMethods([parsed.method])
+    if (parsed.body) {
+      try {
+        const bodyObj = JSON.parse(parsed.body)
+        const fields: FieldDef[] = Object.keys(bodyObj).map((k) => ({ name: k, type: typeof bodyObj[k] === 'number' ? 'int' : 'string' }))
+        setFormTempFields(fields)
+      } catch { setFormTempFields([]) }
+    }
+    setShowCurlImport(false)
+    setCurlInput('')
+    setFormErrors({})
   }
 
   const handleRemoveField = (idx: number) => setFormTempFields((p) => p.filter((_, i) => i !== idx))
@@ -217,6 +258,27 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
               </button>
             </div>
             {formErrors.fields && <p className="text-[10px] text-red-500 mt-1">{formErrors.fields}</p>}
+
+            <details className="group mt-2">
+              <summary className="flex items-center gap-1 text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 cursor-pointer transition-colors">
+                <svg className="w-2 h-2 group-open:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                Añadir en lote
+              </summary>
+              <div className="mt-1.5 flex gap-1">
+                <textarea rows={1} placeholder="nombre:string, precio:int, descripcion:string" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleBulkFields((e.target as HTMLTextAreaElement).value); (e.target as HTMLTextAreaElement).value = '' } }} className="flex-1 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg px-2 py-1 text-[10px] font-mono text-zinc-600 dark:text-zinc-300 outline-none focus:border-emerald-400/70 placeholder-zinc-300 dark:placeholder-zinc-500 resize-none" />
+                <button onClick={(e) => { const ta = e.currentTarget.previousElementSibling as HTMLTextAreaElement; handleBulkFields(ta.value); ta.value = '' }} className="shrink-0 px-2 py-1 rounded-md text-[9px] font-medium bg-zinc-200/60 dark:bg-zinc-700/60 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">Añadir</button>
+              </div>
+            </details>
+
+            <div className="flex flex-wrap gap-1 mt-2">
+              {[
+                { label: 'Usuarios', name: 'API Usuarios', path: 'api/usuarios', methods: ['GET','POST','DELETE'], fields: [{name:'nombre',type:'string'},{name:'email',type:'string'},{name:'edad',type:'int'}] },
+                { label: 'Productos', name: 'API Productos', path: 'api/productos', methods: ['GET','POST','DELETE'], fields: [{name:'nombre',type:'string'},{name:'precio',type:'int'},{name:'stock',type:'int'},{name:'descripcion',type:'string'}] },
+                { label: 'Tareas', name: 'API Tareas', path: 'api/tareas', methods: ['GET','POST','DELETE'], fields: [{name:'titulo',type:'string'},{name:'completada',type:'bool'}] },
+              ].map((t) => (
+                <button key={t.label} onClick={() => handleApplyTemplate(t)} className="px-2 py-1 rounded-md text-[9px] font-medium bg-zinc-50 dark:bg-zinc-800/30 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700/30 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors border border-zinc-200/40 dark:border-zinc-700/40">{t.label}</button>
+              ))}
+            </div>
           </div>
 
           {formTempFields.length > 0 && (
@@ -258,13 +320,29 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
             </details>
           </div>
 
-          <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4">
-            <button type="button" onClick={() => setAiDescription(aiDescription ? '' : ' ')} className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150">
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-              </svg>
-              Generar con IA
-            </button>
+          <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4 space-y-3">
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setAiDescription(aiDescription ? '' : ' ')} className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                </svg>
+                Generar con IA
+              </button>
+              <button type="button" onClick={() => setShowCurlImport(!showCurlImport)} className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                </svg>
+                Importar cURL
+              </button>
+            </div>
+            {showCurlImport && (
+              <div className="mt-3 space-y-2 p-3 bg-zinc-50 dark:bg-zinc-800/30 rounded-xl">
+                <textarea value={curlInput} onChange={(e) => setCurlInput(e.target.value)} placeholder='curl -X POST https://api.ejemplo.com/users -H "Content-Type: application/json" -d \{\"name\":\"Juan\"\}' rows={3} className="w-full bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg px-3 py-2 text-[10px] font-mono text-zinc-600 dark:text-zinc-300 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all placeholder-zinc-300 dark:placeholder-zinc-500 resize-none" />
+                <div className="flex justify-end">
+                  <button onClick={handleImportCurl} className="px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-all">Importar</button>
+                </div>
+              </div>
+            )}
             {aiDescription !== '' && (
               <div className="mt-3 space-y-2">
                 <textarea value={aiDescription === ' ' ? '' : aiDescription} onChange={(e) => setAiDescription(e.target.value)} placeholder="Describí qué API querés, ej: API de usuarios con nombre, email y edad" rows={3} className="w-full bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg px-3 py-2 text-[11px] text-zinc-700 dark:text-zinc-300 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all placeholder-zinc-300 dark:placeholder-zinc-500 resize-none" />
