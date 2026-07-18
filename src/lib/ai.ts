@@ -249,17 +249,21 @@ export async function generateMockApi(description: string): Promise<{
       `  ]\n}\n\n` +
       `Generá SOLO el JSON:`
 
-    const raw = await callExternalAPI(prompt)
-    if (raw) {
-      try {
-        const parsed = JSON.parse(extractJson(raw))
-        if (parsed.sampleData) {
-          parsed.sampleData = parsed.sampleData.slice(0, 20)
+    try {
+      const raw = await callExternalAPI(prompt)
+      if (raw) {
+        try {
+          const parsed = JSON.parse(extractJson(raw))
+          if (parsed.sampleData) {
+            parsed.sampleData = parsed.sampleData.slice(0, 20)
+          }
+          return parsed
+        } catch {
+          return templateMockApi(description)
         }
-        return parsed
-      } catch {
-        throw new Error(`La IA externa no generó JSON válido:\n${raw.slice(0, 300)}`)
       }
+    } catch {
+      return templateMockApi(description)
     }
   }
 
