@@ -159,7 +159,6 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
     const errors: Record<string, string> = {}
     if (!name.trim()) errors.name = 'El nombre es obligatorio'
     if (formMethods.length === 0) errors.methods = 'Selecciona al menos un método'
-    if (formTempFields.length === 0) errors.fields = 'Agrega al menos un campo'
     if (!formPath.trim()) errors.path = 'La ruta es obligatoria'
     if (!formPort.trim()) errors.port = 'El puerto es obligatorio'
     else if (isNaN(Number(formPort)) || Number(formPort) < 1 || Number(formPort) > 65535) errors.port = 'Puerto inválido (1-65535)'

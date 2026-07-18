@@ -77,18 +77,27 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
   const updateSampleRow = (idx: number, field: string, value: string) =>
     setFormSampleData((p) => p.map((row, i) => (i === idx ? { ...row, [field]: value } : row)))
 
+  const validateRequired = (): boolean => {
+    const errs: Record<string, string> = {}
+    if (!formName.trim()) errs.name = 'El nombre es obligatorio'
+    if (formMethods.length === 0) errs.methods = 'Selecciona al menos un método'
+    if (!formPath.trim()) errs.path = 'La ruta es obligatoria'
+    if (!formPort.trim()) errs.port = 'El puerto es obligatorio'
+    else if (isNaN(Number(formPort)) || Number(formPort) < 1 || Number(formPort) > 65535) errs.port = 'Puerto inválido (1-65535)'
+    setFormErrors(errs)
+    return Object.keys(errs).length === 0
+  }
+
   const handleCreate = () => {
+    if (!validateRequired()) return
     const ok = onCreate(formName, formMethods, formPath, formPort, formTempFields, formSampleData)
-    if (ok) {
-      setFormErrors({})
-    }
+    if (ok) setFormErrors({})
   }
 
   const handleCreateNoSample = () => {
+    if (!validateRequired()) return
     const ok = onCreate(formName, formMethods, formPath, formPort, formTempFields, [])
-    if (ok) {
-      setFormErrors({})
-    }
+    if (ok) setFormErrors({})
   }
 
   return (
@@ -161,7 +170,7 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
               <select value={formNewFieldType} onChange={(e) => { setFormNewFieldType(e.target.value); setFormNewFieldValue(''); if (e.target.value === 'bool') setFormNewFieldValue('true') }} className="bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg px-1.5 py-1.5 text-[10px] font-mono text-zinc-600 dark:text-zinc-300 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all w-14 shrink-0">
                 {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
-              <input value={formNewFieldValue} onChange={(e) => { let v = e.target.value; if (formNewFieldType === 'int') v = v.replace(/\D/g, ''); if (formNewFieldType === 'float') v = v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'); setFormNewFieldValue(v) }} placeholder={formNewFieldType === 'int' ? '0' : formNewFieldType === 'float' ? '0.0' : formNewFieldType === 'bool' ? 'true' : 'val'} className={inputClass + " w-20 shrink-0 placeholder-zinc-300 dark:placeholder-zinc-500"} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddField() } }} />
+              <input value={formNewFieldValue} onChange={(e) => { let v = e.target.value; if (formNewFieldType === 'int') v = v.replace(/\D/g, ''); if (formNewFieldType === 'float') v = v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'); if (formNewFieldType === 'string' && formNewFieldMaxLen) v = v.slice(0, Number(formNewFieldMaxLen)); setFormNewFieldValue(v) }} placeholder={formNewFieldType === 'int' ? '0' : formNewFieldType === 'float' ? '0.0' : formNewFieldType === 'bool' ? 'true' : 'val'} className={inputClass + " w-20 shrink-0 placeholder-zinc-300 dark:placeholder-zinc-500"} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddField() } }} />
               {formNewFieldType === 'string' && (
                 <input value={formNewFieldMaxLen} onChange={(e) => setFormNewFieldMaxLen(e.target.value.replace(/\D/g, ''))} placeholder="max" title="Longitud máxima" className={inputClass + " w-12 shrink-0 placeholder-zinc-300 dark:placeholder-zinc-500 text-center"} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddField() } }} />
               )}
@@ -179,7 +188,7 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
                 {formSampleData.map((row, ri) => (
                   <div key={ri} className="flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg px-2 py-1.5">
                     {formTempFields.map((f) => (
-                      <input key={f.name} value={row[f.name] ?? ''} onChange={(e) => updateSampleRow(ri, f.name, e.target.value)} placeholder={f.name} className="flex-1 min-w-0 bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 rounded-md px-2 py-1 text-[10px] font-mono text-zinc-700 dark:text-zinc-300 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all placeholder-zinc-300 dark:placeholder-zinc-500" />
+                      <input key={f.name} value={row[f.name] ?? ''} onChange={(e) => { let v = e.target.value; if (f.maxLength && f.type === 'string') v = v.slice(0, f.maxLength); updateSampleRow(ri, f.name, v) }} placeholder={f.name} className="flex-1 min-w-0 bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 rounded-md px-2 py-1 text-[10px] font-mono text-zinc-700 dark:text-zinc-300 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all placeholder-zinc-300 dark:placeholder-zinc-500" />
                     ))}
                     <button onClick={() => removeSampleRow(ri)} className="shrink-0 w-5 h-5 flex items-center justify-center rounded text-zinc-400 dark:text-zinc-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors duration-150">
                       <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
