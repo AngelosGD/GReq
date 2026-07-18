@@ -55,6 +55,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
   const [activeMethod, setActiveMethod] = useState('GET')
   const [restoreList, setRestoreList] = useState<{ apiId: string; name: string; port: number }[]>([])
   const [deleteTarget, setDeleteTarget] = useState<MockApiItem | null>(null)
+  const [duplicateTarget, setDuplicateTarget] = useState<MockApiItem | null>(null)
   const [inspectLog, setInspectLog] = useState<{ method: string; path: string; body: string } | null>(null)
   const [inspectLoading, setInspectLoading] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -187,8 +188,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
   }
 
   const confirmDelete = (api: MockApiItem) => {
-    if (api.running) setDeleteTarget(api)
-    else doDelete(api)
+    setDeleteTarget(api)
   }
 
   const doDelete = async (api: MockApiItem) => {
@@ -203,7 +203,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
   const setMethodStatusCode = (apiId: string, method: string, code: number) => setMockApis((a) => a.map((x) => x.id === apiId ? { ...x, methodBodies: { ...x.methodBodies, [method]: { ...(x.methodBodies[method] ?? { responseBody: x.responseBody, responseHeaders: x.responseHeaders }), statusCode: code } } } : x))
   const setMethodResponseBody = (apiId: string, method: string, body: string) => setMockApis((a) => a.map((x) => x.id === apiId ? { ...x, methodBodies: { ...x.methodBodies, [method]: { ...(x.methodBodies[method] ?? { statusCode: x.statusCode, responseHeaders: x.responseHeaders }), responseBody: body } } } : x))
   const setMethodResponseHeaders = (apiId: string, method: string, headers: { key: string; value: string }[]) => setMockApis((a) => a.map((x) => x.id === apiId ? { ...x, methodBodies: { ...x.methodBodies, [method]: { ...(x.methodBodies[method] ?? { statusCode: x.statusCode, responseBody: x.responseBody }), responseHeaders: headers } } } : x))
-  const setSampleData = (apiId: string, data: Record<string, string>[]) => setMockApis((a) => a.map((x) => x.id === apiId ? { ...x, sampleData: data, responseBody: JSON.stringify(data.map((row, i) => ({ id: i + 1, ...row })), null, 2) } : x))
+  const setSampleData = (apiId: string, data: Record<string, string>[]) => setMockApis((a) => a.map((x) => x.id === apiId ? { ...x, sampleData: data, responseBody: JSON.stringify(data.map((row, i) => ({ id: i + 1, ...Object.fromEntries(x.fields.map((f) => { let v: any = row[f.name] ?? ''; if (f.type === 'int') v = Number(row[f.name]) || 0; else if (f.type === 'float') v = Number(row[f.name]) || 0; else if (f.type === 'bool') v = row[f.name] === 'true' || row[f.name] === '1'; return [f.name, v] })) })), null, 2) } : x))
 
   const fetchInspect = async (api: MockApiItem) => {
     setInspectLoading(true)
@@ -227,11 +227,12 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
     setEditing(false)
   }
   const cancelEditing = () => setEditing(false)
-  const duplicateApi = (api: MockApiItem) => {
-    if (mockApis.length >= 20) { alert('Límite de 20 APIs de prueba alcanzado'); return }
+  const doDuplicate = (api: MockApiItem) => {
+    if (mockApis.length >= 20) { alert('Límite de 20 APIs de prueba alcanzado'); setDuplicateTarget(null); return }
     const id = genId()
     setMockApis((a) => [...a, { ...JSON.parse(JSON.stringify(api)), id, name: `${api.name} (copia)`, running: false, serverId: null, port: randomPort() }])
     selectApi(id)
+    setDuplicateTarget(null)
   }
   const exportApi = (api: MockApiItem) => {
     const blob = new Blob([JSON.stringify(api, null, 2)], { type: 'application/json' })
@@ -332,7 +333,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
             onSaveEditing={() => saveEditing(activeApi)} onCancelEditing={cancelEditing} onStartEditing={() => startEditing(activeApi)}
             onStartApi={() => startApi(activeApi)} onStopApi={() => stopApi(activeApi)}
             onFetchInspect={() => fetchInspect(activeApi)} onTestInCanvas={onTestInCanvas}
-            onDuplicateApi={() => duplicateApi(activeApi)} onExportApi={() => exportApi(activeApi)}
+            onDuplicateApi={() => setDuplicateTarget(activeApi)} onExportApi={() => exportApi(activeApi)}
             onConfirmDelete={() => confirmDelete(activeApi)}
             onSetDelayMs={(ms) => setDelayMs(activeApi.id, ms)}
             onSetMethodStatusCode={(m, c) => setMethodStatusCode(activeApi.id, m, c)}
@@ -371,12 +372,31 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
               </div>
               <div>
                 <p className="text-sm font-medium text-zinc-800">Eliminar API</p>
-                <p className="text-[11px] text-zinc-500 mt-0.5">La API está en ejecución. ¿Detener y liberar el puerto?</p>
+                <p className="text-[11px] text-zinc-500 mt-0.5">{deleteTarget.running ? 'La API está en ejecución. ¿Detener y eliminar?' : '¿Eliminar esta API definitivamente?'}</p>
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <button onClick={() => setDeleteTarget(null)} className="px-3 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 hover:bg-zinc-100 transition-colors">Cancelar</button>
               <button onClick={() => doDelete(deleteTarget)} className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-red-600 text-white hover:bg-red-700 transition-all">Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {duplicateTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/15" onClick={() => setDuplicateTarget(null)}>
+          <div className="bg-white rounded-xl shadow-xl shadow-black/8 w-80 p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-zinc-800">Duplicar API</p>
+                <p className="text-[11px] text-zinc-500 mt-0.5">¿Crear una copia de "{duplicateTarget.name}"?</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setDuplicateTarget(null)} className="px-3 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 hover:bg-zinc-100 transition-colors">Cancelar</button>
+              <button onClick={() => doDuplicate(duplicateTarget)} className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-zinc-900 text-white hover:bg-zinc-800 transition-all">Duplicar</button>
             </div>
           </div>
         </div>

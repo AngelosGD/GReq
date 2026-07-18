@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { FieldDef, methods, methodColors, FIELD_TYPES } from './types'
 import { generateMockApi } from '../../lib/ai'
+import { generateRows } from '../../lib/generateSampleData'
 
 interface Props {
   onClose: () => void
@@ -47,6 +48,16 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
       setFormMethods(result.methods)
       resetFormFieldTypes(result.fields)
       setFormTempFields(result.fields)
+      if (result.sampleData) {
+        setFormSampleData(result.sampleData.map((r) => {
+          const row: Record<string, string> = {}
+          for (const f of result.fields) {
+            const v = r[f.name]
+            row[f.name] = v == null ? '' : String(v)
+          }
+          return row
+        }))
+      }
       setFormErrors({})
     } catch (e) {
       alert(`Error al generar con IA: ${e}`)
@@ -200,28 +211,7 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                     Añadir registro
                   </button>
-                  <button onClick={() => {
-                    const rows: Record<string, string>[] = []
-                    const firstNames = ['Alice','Bob','Charlie','Diana','Eve','Frank','Grace','Hank']
-                    const lastNames = ['Smith','Jones','Garcia','Lee','Kim','Brown','Chen','Patel']
-                    const domains = ['gmail.com','outlook.com','corp.io','demo.org']
-                    for (let i = 0; i < 5; i++) {
-                      const row: Record<string, string> = {}
-                      for (const f of formTempFields) {
-                        if (f.type === 'int') row[f.name] = String(Math.floor(Math.random() * 1000) + 1)
-                        else if (f.type === 'float') row[f.name] = (Math.random() * 10000).toFixed(2)
-                        else if (f.type === 'bool') row[f.name] = Math.random() > 0.5 ? 'true' : 'false'
-                        else if (f.name.toLowerCase().includes('email')) row[f.name] = `${firstNames[i % firstNames.length].toLowerCase()}@${domains[i % domains.length]}`
-                        else if (f.name.toLowerCase().includes('name') || f.name.toLowerCase().includes('nombre')) row[f.name] = `${firstNames[i % firstNames.length]} ${lastNames[i % lastNames.length]}`
-                        else {
-                          const val = `${f.name}_${i + 1}`
-                          row[f.name] = f.maxLength ? val.slice(0, f.maxLength) : val
-                        }
-                      }
-                      rows.push(row)
-                    }
-                    setFormSampleData(rows)
-                  }} className="text-[10px] font-medium text-emerald-600 hover:text-emerald-700 transition-colors">
+                  <button onClick={() => setFormSampleData(generateRows(formTempFields, 5))} className="text-[10px] font-medium text-emerald-600 hover:text-emerald-700 transition-colors">
                     Generar 5 filas
                   </button>
                 </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { KeyValueEditor } from '../KeyValueEditor'
 import { MockApiItem, methodColors } from './types'
+import { generateRows } from '../../lib/generateSampleData'
 
 interface Props {
   api: MockApiItem
@@ -219,35 +220,14 @@ export function MockApiEditor({
                 ))}
               </div>
             )}
-            {api.fields.length > 0 && activeMethod === 'GET' && (
+            {api.fields.length > 0 && (
               <div className="pt-2 border-t border-zinc-100 dark:border-zinc-700/50 mt-2">
                 <div className="flex items-center gap-2">
                   <span className="text-[9px] text-zinc-400 dark:text-zinc-500">Generar registros aleatorios:</span>
                   <input type="number" min={1} max={20} value={genCount} onChange={(e) => setGenCount(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
                     className="w-12 bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 rounded-md px-1.5 py-0.5 text-[10px] font-mono text-zinc-600 dark:text-zinc-300 outline-none text-center" />
                   <span className="text-[9px] text-zinc-400">registros (máx 20)</span>
-                  <button onClick={() => {
-                    const firstNames = ['Alice','Bob','Charlie','Diana','Eve','Frank','Grace','Hank','Ivy','Jack']
-                    const lastNames = ['Smith','Jones','Garcia','Lee','Kim','Brown','Chen','Patel','Wang','Lopez']
-                    const domains = ['gmail.com','outlook.com','corp.io','demo.org','test.io']
-                    const rows: Record<string, string>[] = []
-                    for (let i = 0; i < genCount; i++) {
-                      const row: Record<string, string> = {}
-                      for (const f of api.fields) {
-                        if (f.type === 'int') row[f.name] = String(Math.floor(Math.random() * 1000) + 1)
-                        else if (f.type === 'float') row[f.name] = (Math.random() * 10000).toFixed(2)
-                        else if (f.type === 'bool') row[f.name] = Math.random() > 0.5 ? 'true' : 'false'
-                        else if (f.name.toLowerCase().includes('email')) row[f.name] = `${firstNames[i % firstNames.length].toLowerCase()}@${domains[i % domains.length]}`
-                        else if (f.name.toLowerCase().includes('name') || f.name.toLowerCase().includes('nombre')) row[f.name] = `${firstNames[i % firstNames.length]} ${lastNames[i % lastNames.length]}`
-                        else {
-                          const val = `${f.name}_${i + 1}`
-                          row[f.name] = f.maxLength ? val.slice(0, f.maxLength) : val
-                        }
-                      }
-                      rows.push(row)
-                    }
-                    onSetSampleData(rows)
-                  }} className="px-2 py-1 rounded-md text-[9px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] transition-all">Generar</button>
+                  <button onClick={() => onSetSampleData(generateRows(api.fields, genCount))} className="px-2 py-1 rounded-md text-[9px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] transition-all">Generar</button>
                 </div>
               </div>
             )}

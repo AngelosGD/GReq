@@ -222,19 +222,41 @@ export async function generateMockApi(description: string): Promise<{
   methods: string[]
   fields: { name: string; type: string }[]
   body: string
+  sampleData?: Record<string, unknown>[]
 }> {
   const { provider, apiKey } = useAIStore.getState()
 
   if ((provider === 'gemini' || provider === 'openai') && apiKey) {
     const prompt =
-      `Genera una configuración de API mock en JSON válido.\nDescripción: ${description}\n\n` +
-      `Formato exacto (solo JSON):\n{\n  "name": "...",\n  "path": "/...",\n  "methods": ["GET"],\n  "fields": [{"name": "...", "type": "string"}],\n  "body": "{...}"\n}\n\n` +
-      `Tipos: string, int, bool. Reglas: name corto, path empieza con /, methods GET/POST/PUT/PATCH/DELETE/UPDATE, fields mínimo 1, body JSON ejemplo.\n\nGenera el JSON:`
+      `Genera JSON válido para una API mock REST.\n\n` +
+      `Descripción del usuario: ${description}\n\n` +
+      `REGLAS ESTRICTAS:\n` +
+      `1. Los fields deben coincidir EXACTAMENTE con los campos que el usuario menciona. No inventes campos extra. Si pide nombre, cantidad, descripcion — usá esos, no otros.\n` +
+      `2. Los tipos disponibles son: string, int, bool. Respetá los tipos que pide el usuario.\n` +
+      `3. sampleData: array de 3 objetos con datos realistas y variados para la entidad (productos, usuarios, etc). Valores int como números (sin comillas), bool como true/false (sin comillas), string con comillas.\n` +
+      `4. Los valores de ejemplo deben ser coherentes con la entidad: para productos usá nombres de productos reales (Laptop, Teclado, etc), NO nombres de personas.\n` +
+      `5. body: string con JSON realista que incluya todos los campos.\n\n` +
+      `Formato exacto (solo JSON, sin markdown ni explicaciones):\n{\n` +
+      `  "name": "Productos API",\n` +
+      `  "path": "/products",\n` +
+      `  "methods": ["GET","POST"],\n` +
+      `  "fields": [{"name":"nombre","type":"string"},{"name":"cantidad","type":"int"}],\n` +
+      `  "body": "{\\n  \\"nombre\\": \\"Laptop Gamer\\",\\n  \\"cantidad\\": 50\\n}",\n` +
+      `  "sampleData": [\n` +
+      `    {"nombre":"Teclado Mecánico","cantidad":120},\n` +
+      `    {"nombre":"Monitor 27\\\" 4K","cantidad":45},\n` +
+      `    {"nombre":"Mouse Inalámbrico","cantidad":200}\n` +
+      `  ]\n}\n\n` +
+      `Generá SOLO el JSON:`
 
     const raw = await callExternalAPI(prompt)
     if (raw) {
       try {
-        return JSON.parse(extractJson(raw))
+        const parsed = JSON.parse(extractJson(raw))
+        if (parsed.sampleData) {
+          parsed.sampleData = parsed.sampleData.slice(0, 20)
+        }
+        return parsed
       } catch {
         throw new Error(`La IA externa no generó JSON válido:\n${raw.slice(0, 300)}`)
       }
