@@ -3,7 +3,6 @@ import {
   ReactFlowProvider,
   useNodesState,
   useEdgesState,
-  useReactFlow,
   addEdge,
   type Node,
   type Edge,
@@ -76,7 +75,6 @@ export function MainApp() {
   const setUser = useAuthStore((s) => s.setUser)
   const takeSnapshot = useFlowStore((s) => s.takeSnapshot)
   const { undo, redo, canUndo, canRedo } = useUndoRedo()
-  const reactFlow = useReactFlow()
   const setNodeData = useCallback((id: string, data: Record<string, unknown>) => {
     const node = nodes.find((n) => n.id === id)
     if (node && ('title' in data || 'url' in data)) {
@@ -434,13 +432,11 @@ export function MainApp() {
     input.click()
   }, [setNodes, setEdges, takeSnapshot])
 
+  const focusNodeRef = useRef<((nodeId: string) => void) | null>(null)
+
   const focusNode = useCallback((nodeId: string) => {
-    const node = nodes.find((n) => n.id === nodeId)
-    if (node) {
-      reactFlow.setCenter(node.position.x + 150, node.position.y + 50, { zoom: 1.2, duration: 300 })
-      setSelectedNode(node)
-    }
-  }, [nodes, reactFlow])
+    focusNodeRef.current?.(nodeId)
+  }, [])
 
   const autoLayout = useCallback(() => {
     takeSnapshot(nodes, edges)
@@ -935,6 +931,7 @@ export function MainApp() {
                 setSelectedNode(node)
                 setCtxMenu({ x: _e.clientX, y: _e.clientY, node })
               }}
+              focusNodeRef={focusNodeRef}
             />
 
             {nodes.length === 0 && !selectedNode && (

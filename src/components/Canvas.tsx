@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useEffect } from 'react'
 import {
   ReactFlow,
   Background,
@@ -20,15 +20,28 @@ interface CanvasProps {
   addNodeToCanvas: (type: string, pos?: { x: number; y: number }) => void
   onNodeSelect: (node: Node | null) => void
   onNodeContext: (event: React.MouseEvent, node: Node) => void
+  focusNodeRef?: React.MutableRefObject<((nodeId: string) => void) | null>
 }
 
 export function Canvas({
   nodes, edges, onNodesChange, onEdgesChange, onConnect,
-  addNodeToCanvas, onNodeSelect, onNodeContext,
+  addNodeToCanvas, onNodeSelect, onNodeContext, focusNodeRef,
 }: CanvasProps) {
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, setCenter } = useReactFlow()
   const addRef = useRef(addNodeToCanvas)
   addRef.current = addNodeToCanvas
+
+  useEffect(() => {
+    if (focusNodeRef) {
+      focusNodeRef.current = (nodeId: string) => {
+        const node = nodes.find((n) => n.id === nodeId)
+        if (node) {
+          setCenter(node.position.x + 150, node.position.y + 50, { zoom: 1.2, duration: 300 })
+          onNodeSelect(node)
+        }
+      }
+    }
+  }, [nodes, setCenter, onNodeSelect, focusNodeRef])
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
