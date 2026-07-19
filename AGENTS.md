@@ -21,7 +21,7 @@ No lint/test/format/codegen. `noUnusedLocals` + `noUnusedParameters` in tsconfig
 All Rust structs `#[serde(rename_all = "camelCase")]`.
 
 - `make_request` — auto-prepend `http://` if no scheme, 30s timeout, maps UPDATE→PUT
-- `start_mock_server` / `stop_mock_server` / `stop_all_mock_servers` — axum mock on `127.0.0.1:{port}` (random if 0). MockConfig: `{ path, methods, status, headers, body, port, delayMs, methodConfigs, fields, sampleData }`. Smart per-method handler: GET returns array/list or single (/:id), POST merges body+fields → 201+gen ID, DELETE → `{deleted:true,id}`, UPDATE/PUT/PATCH → `{updated:true,id,data}`. Fields typed: `string`/`int`/`bool`.
+ - `start_mock_server` / `stop_mock_server` / `stop_all_mock_servers` — axum mock on `127.0.0.1:{port}` (random if 0). MockConfig: `{ path, methods, status, headers, body, port, delayMs, methodConfigs, fields, sampleData, rateLimit (0=off), env_vars }`. Smart per-method handler: GET returns array/list or single (/:id), POST merges body+fields → 201+gen ID, DELETE → `{deleted:true,id}`, UPDATE/PUT/PATCH → `{updated:true,id,data}`. Fields typed: `string`/`int`/`bool`. Pagination via `?page=N&limit=M` + `X-Total-Count`/`Link` headers. Rate limiting: 429 + `Retry-After`. Env vars: `{{env.VAR_NAME}}` resolved from `env_vars`.
 - `start_oauth_server` / `wait_oauth_callback` / `start_oauth_webview` — ephemeral axum callback server + Tauri WebviewWindow for Appwrite OAuth, intercepts `cloud.appwrite.io/console/auth/oauth2/success`
 - `login_with_github` / `login_with_google` — backend OAuth (ephemeral axum → browser → callback → code exchange → user fetch). Frontend creates Appwrite user with deterministic password: `greq_oauth_` + `btoa(email + ':greq').slice(0,16)`.
 - Dynamic templates (Rust `resolve_dynamic` in `mock.rs:187-224`): `{{$uuid}}`, `{{$timestamp}}`, `{{$randomInt}}`, `{{$randomBoolean}}`, `{{$randomName}}`, `{{$randomEmail}}`, `{{$randomWord}}`, `{{$randomNumber(min,max)}}`.
@@ -38,8 +38,9 @@ All Rust structs `#[serde(rename_all = "camelCase")]`.
 ```
 
 ## Node Data (`src/types.ts`)
-- **URL node**: `{ url, title, params:[], headers:[] }` — sidecar, no request sent
-- **Method node**: `{ method, headers, body, bodyType, auth, authValue, repeatCount }` (default 1). Walks edges backward for `$prev` resolution. Connections: URL(source)→Method(target); Method(source)→Method(target)
+- **URL node**: `{ url, title, params:[], headers:[], locked? }` — sidecar, no request sent
+- **Method node**: `{ method, headers, body, bodyType, auth, authValue, repeatCount, locked? }` (default 1). Walks edges backward for `$prev` resolution. Connections: URL(source)→Method(target); Method(source)→Method(target)
+- **Lock**: `locked: true` prevents drag, selection, edit, execute, and delete. Toggle via ConfigPanel header or ContextMenu. Visual indicator: lock icon + reduced opacity.
 - **Sidebar drag keys** (HTML5 native Drag API, `NodeCard.tsx`): `'url'`, `'get'`, `'post'`, `'put'`, `'patch'`, `'delete'`, `'update'`
 
 ## Known Issues
@@ -50,7 +51,7 @@ All Rust structs `#[serde(rename_all = "camelCase")]`.
 ## Limitations
 - OpenAPI YAML parser indent-based — no multi-line strings, arrays, `$ref`, anchors (`src/lib/openapi.ts:51-84`)
 - No per-route method config on import — all methods share one responseBody
-- Mock server lacks pagination, rate limiting, conditional responses, WebSocket, SSE
+- Mock server lacks conditional responses, WebSocket, SSE
 - cURL/HAR/Postman/Insomnia import unsupported
 - `__history` endpoint exists (`GET /__history`) but no frontend UI button
 - No response validation or schema generation
