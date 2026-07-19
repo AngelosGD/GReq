@@ -9,15 +9,17 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
   const { updateNodeData } = useReactFlow()
   const url = data.url ?? ''
   const [focused, setFocused] = useState(false)
+  const locked = !!data.locked
 
   return (
     <div
       className={`
         relative bg-white dark:bg-zinc-900 rounded-xl transition-all duration-200
-        ${selected
+        ${selected && !locked
           ? 'border-emerald-300/80 shadow-[0_0_0_1px_rgba(16,185,129,0.2),0_4px_14px_rgba(16,185,129,0.08)]'
           : 'border-zinc-200/60 dark:border-zinc-700/60 shadow-tinted hover:shadow-tinted-md hover:border-zinc-300/60 dark:hover:border-zinc-600/60'
         }
+        ${locked ? 'opacity-70' : ''}
       `}
     >
       <div
@@ -27,6 +29,13 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
       />
 
       <div className="relative pl-5 pr-3.5 py-3">
+        {locked && (
+          <div className="absolute -top-2 right-3 z-10">
+            <svg className="w-3 h-3 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+          </div>
+        )}
         {data.title && (
           <div className="absolute -top-2 left-5 right-3.5 flex items-center gap-1.5">
             <span className="text-[8px] font-semibold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded truncate max-w-[160px]">
@@ -62,9 +71,10 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder="https://api.ejemplo.com"
-            className="nodrag w-full bg-transparent text-[11px] font-mono text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400/40 dark:placeholder-zinc-600 outline-none"
+            readOnly={locked}
+            className={`nodrag w-full bg-transparent text-[11px] font-mono text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400/40 dark:placeholder-zinc-600 outline-none ${locked ? 'cursor-not-allowed' : ''}`}
           />
-          {url && (
+          {url && !locked && (
             <button
               onClick={() => updateNodeData(id, { url: '' })}
               className="nodrag p-0.5 rounded text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"

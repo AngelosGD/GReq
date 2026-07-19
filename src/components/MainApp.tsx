@@ -7,6 +7,7 @@ import {
   type Node,
   type Edge,
   type Connection,
+  type NodeChange,
 } from '@xyflow/react'
 import { Logo } from './Logo'
 import { useAppStore } from '../store'
@@ -53,6 +54,18 @@ export function MainApp() {
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('options')
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const wrappedOnNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      const lockedIds = new Set(
+        nodes.filter((n) => (n.data as Record<string, unknown>)?.locked).map((n) => n.id)
+      )
+      const filtered = changes.filter(
+        (c) => c.type !== 'position' && c.type !== 'dimensions' || !('id' in c) || !lockedIds.has(c.id)
+      )
+      onNodesChange(filtered)
+    },
+    [nodes, onNodesChange],
+  )
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; node: Node } | null>(null)
   const [showHistory, setShowHistory] = useState(false)
@@ -406,6 +419,7 @@ export function MainApp() {
       }
       const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName) || (e.target as HTMLElement)?.isContentEditable
       if ((e.key === 'Delete' || e.key === 'Supr' || e.key === 'Backspace') && selectedNode && !isInput) {
+        if ((selectedNode.data as Record<string, unknown>)?.locked) return
         e.preventDefault()
         deleteNode(selectedNode)
       }
@@ -943,7 +957,7 @@ export function MainApp() {
             <Canvas
               nodes={nodes}
               edges={edges}
-              onNodesChange={onNodesChange}
+              onNodesChange={wrappedOnNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               addNodeToCanvas={addNodeToCanvas}
@@ -979,6 +993,8 @@ export function MainApp() {
               x={ctxMenu.x}
               y={ctxMenu.y}
               nodeId={ctxMenu.node.id}
+              locked={!!(ctxMenu.node.data as Record<string, unknown>)?.locked}
+              onToggleLock={() => setNodeData(ctxMenu.node.id, { locked: !(ctxMenu.node.data as Record<string, unknown>)?.locked })}
               collections={collections}
               onDuplicate={() => duplicateNode(ctxMenu.node)}
               onDelete={() => deleteNode(ctxMenu.node)}

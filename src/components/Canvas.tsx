@@ -64,6 +64,7 @@ export function Canvas({
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
+      if ((node.data as Record<string, unknown>)?.locked) return
       onNodeSelect(node)
     },
     [onNodeSelect],

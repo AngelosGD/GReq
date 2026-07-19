@@ -20,15 +20,17 @@ function MethodNode({ data, selected, id }: NodeProps<MethodNodeType>) {
   const cfg = methodStyles[data.method ?? 'GET']
   const loading = useExecStore((s) => s.loading[id] ?? false)
   const executeFn = useExecStore((s) => s.executeFn)
+  const locked = !!data.locked
 
   return (
     <div
       className={`
         relative bg-white dark:bg-zinc-900 rounded-xl transition-all duration-200
-        ${selected
+        ${selected && !locked
           ? 'border-zinc-300/80 dark:border-zinc-600/80 shadow-tinted-md'
           : 'border-zinc-200/60 dark:border-zinc-700/60 shadow-tinted hover:shadow-tinted-md hover:border-zinc-300/60 dark:hover:border-zinc-600/60'
         }
+        ${locked ? 'opacity-70' : ''}
       `}
       style={{ minWidth: 180 }}
     >
@@ -38,6 +40,13 @@ function MethodNode({ data, selected, id }: NodeProps<MethodNodeType>) {
       />
 
       <div className="relative pl-5 pr-3.5 py-3">
+        {locked && (
+          <div className="absolute -top-2 right-3 z-10">
+            <svg className="w-3 h-3 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+          </div>
+        )}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: cfg.dot, boxShadow: `0 0 4px ${cfg.dot}44` }} />
@@ -57,15 +66,15 @@ function MethodNode({ data, selected, id }: NodeProps<MethodNodeType>) {
 
         <button
           onClick={() => executeFn?.(id)}
-          disabled={loading}
+          disabled={loading || locked}
           onMouseEnter={() => setHover(true)}
           onMouseLeave={() => setHover(false)}
           className="nodrag w-full flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold text-white
-                     transition-all duration-150 active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait"
+                     transition-all duration-150 active:scale-[0.97] disabled:opacity-60 disabled:cursor-not-allowed"
           style={{
-            background: loading ? '#a1a1aa' : `linear-gradient(135deg, ${cfg.from}, ${cfg.to})`,
-            boxShadow: hover && !loading ? `0 4px 12px ${cfg.dot}44` : `0 1px 3px ${cfg.dot}22`,
-            transform: hover && !loading ? 'translateY(-1px)' : 'translateY(0)',
+            background: loading ? '#a1a1aa' : locked ? '#a1a1aa' : `linear-gradient(135deg, ${cfg.from}, ${cfg.to})`,
+            boxShadow: hover && !loading && !locked ? `0 4px 12px ${cfg.dot}44` : `0 1px 3px ${cfg.dot}22`,
+            transform: hover && !loading && !locked ? 'translateY(-1px)' : 'translateY(0)',
           }}
         >
           {loading ? (
@@ -73,12 +82,16 @@ function MethodNode({ data, selected, id }: NodeProps<MethodNodeType>) {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
+          ) : locked ? (
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            </svg>
           ) : (
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 3l14 9-14 9V3z" />
             </svg>
           )}
-          {loading ? 'Enviando...' : 'Ejecutar'}
+          {loading ? 'Enviando...' : locked ? 'Bloqueado' : 'Ejecutar'}
         </button>
       </div>
 

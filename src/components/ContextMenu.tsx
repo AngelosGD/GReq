@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 
-export function ContextMenu({ x, y, onDuplicate, onDelete, onClose, collections, onAddToCollection, nodeId }: {
+export function ContextMenu({ x, y, onDuplicate, onDelete, onClose, collections, onAddToCollection, nodeId, locked, onToggleLock }: {
   x: number; y: number
   onDuplicate: () => void
   onDelete: () => void
@@ -8,6 +8,8 @@ export function ContextMenu({ x, y, onDuplicate, onDelete, onClose, collections,
   collections?: { id: string; name: string; nodeIds: string[] }[]
   onAddToCollection?: (collectionId: string, nodeId: string) => void
   nodeId?: string
+  locked?: boolean
+  onToggleLock?: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -36,6 +38,21 @@ export function ContextMenu({ x, y, onDuplicate, onDelete, onClose, collections,
         </svg>
         Duplicar
       </button>
+      {onToggleLock && (
+        <button
+          onClick={() => { onToggleLock(); onClose() }}
+          className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors duration-150"
+        >
+          <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            {locked ? (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            )}
+          </svg>
+          {locked ? 'Desbloquear' : 'Bloquear'}
+        </button>
+      )}
       {collections && collections.length > 0 && (
         <div className="border-t border-zinc-100 dark:border-zinc-800 pt-1 mt-1">
           <div className="px-3.5 py-1 text-[9px] font-semibold text-zinc-400 uppercase tracking-wider">Agregar a colección</div>

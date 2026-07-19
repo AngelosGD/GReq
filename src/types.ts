@@ -27,6 +27,7 @@ export interface NodeDataUrl {
   title: string
   headers: KeyValuePair[]
   params: KeyValuePair[]
+  locked?: boolean
 }
 
 export interface NodeDataMethod {
@@ -39,6 +40,7 @@ export interface NodeDataMethod {
   repeatCount: number
   response?: StoredResponse
   responses?: StoredResponse[]
+  locked?: boolean
 }
 
 export type AnyNodeData = NodeDataUrl | NodeDataMethod
