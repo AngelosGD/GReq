@@ -233,12 +233,12 @@ export function MockApiEditor({
                   <span className="text-[9px] text-zinc-400 dark:text-zinc-500">Generar registros aleatorios:</span>
                   <input type="number" min={1} max={20} value={genCount} onChange={(e) => setGenCount(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
                     className="w-12 bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 rounded-md px-1.5 py-0.5 text-[10px] font-mono text-zinc-600 dark:text-zinc-300 outline-none text-center" />
-                  <span className="text-[9px] text-zinc-400">registros (máx 20)</span>
+                  <span className="text-[9px] text-zinc-400 dark:text-zinc-500">registros (máx 20)</span>
                   <button onClick={() => onSetSampleData(generateRows(api.fields, genCount))} className="px-2 py-1 rounded-md text-[9px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] transition-all">Generar</button>
                 </div>
                 {api.sampleData.length > 0 && (
                   <details className="group">
-                    <summary className="flex items-center gap-1 text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 cursor-pointer transition-colors">
+                    <summary className="flex items-center gap-1 text-[9px] text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 cursor-pointer transition-colors">
                       <svg className="w-2 h-2 group-open:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                       Editar datos ({api.sampleData.length} registros)
                     </summary>
@@ -251,7 +251,7 @@ export function MockApiEditor({
                               onSetSampleData(newData)
                             }} placeholder={f.name} className="flex-1 min-w-0 bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 rounded-md px-1.5 py-1 text-[9px] font-mono text-zinc-600 dark:text-zinc-300 outline-none focus:border-emerald-400/70 placeholder-zinc-300 dark:placeholder-zinc-500" />
                           ))}
-                          <button onClick={() => onSetSampleData(api.sampleData.filter((_, i) => i !== ri))} className="shrink-0 w-4 h-4 flex items-center justify-center rounded text-zinc-300 dark:text-zinc-600 hover:text-red-500 transition-colors">
+                          <button onClick={() => onSetSampleData(api.sampleData.filter((_, i) => i !== ri))} className="shrink-0 w-4 h-4 flex items-center justify-center rounded text-zinc-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 transition-colors">
                             <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                           </button>
                         </div>
@@ -278,14 +278,14 @@ export function MockApiEditor({
             </div>
             <textarea value={effResponseBody(activeMethod)} onChange={(e) => onSetMethodResponseBody(activeMethod, e.target.value)}
               className="w-full bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg p-2.5 font-mono text-[10px] text-zinc-600 dark:text-zinc-300 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all resize-none h-24" />
-            <details className="text-[9px] text-zinc-400">
-              <summary className="cursor-pointer hover:text-zinc-600">Templates dinámicos</summary>
+            <details className="text-[9px] text-zinc-400 dark:text-zinc-500">
+              <summary className="cursor-pointer hover:text-zinc-600 dark:hover:text-zinc-300">Templates dinámicos</summary>
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {['{{$randomName}}','{{$randomEmail}}','{{$randomInt}}','{{$uuid}}','{{$timestamp}}','{{$randomBoolean}}','{{$randomWord}}','{{$randomNumber(1,100)}}'].map((t) => (
                   <button key={t} onClick={() => {
                     const ta = document.querySelector('textarea.font-mono') as HTMLTextAreaElement
                     if (ta) { ta.value += t; ta.dispatchEvent(new Event('input', { bubbles: true })) }
-                  }} className="px-1.5 py-0.5 rounded bg-zinc-100 hover:bg-zinc-200 text-zinc-500 font-mono transition-colors">{t}</button>
+                  }} className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 font-mono transition-colors">{t}</button>
                 ))}
               </div>
             </details>

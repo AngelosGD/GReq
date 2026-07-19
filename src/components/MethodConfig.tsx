@@ -12,7 +12,7 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
   return (
     <div className="space-y-4">
       <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Method</label>
+        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Method</label>
         <div className="flex gap-0.5">
           {['GET', 'POST', 'DELETE', 'UPDATE'].map((m) => {
             const active = method === m
@@ -22,8 +22,8 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
                 onClick={() => setNodeData(node.id, { method: m })}
                 className={`flex-1 px-2 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border-b-2 ${
                   active
-                    ? 'bg-zinc-50'
-                    : 'text-zinc-400 hover:text-zinc-600 border-transparent'
+                    ? 'bg-zinc-50 dark:bg-zinc-800'
+                    : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:text-zinc-300 border-transparent'
                 }`}
                 style={active ? { borderBottomColor: methodDots[m], color: methodDots[m] } : undefined}
               >
@@ -35,7 +35,7 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Repetir</label>
+        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Repetir</label>
         <div className="flex items-center gap-2">
           <input
             type="number"
@@ -43,14 +43,14 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
             max={99}
             value={(d.repeatCount as number) ?? 1}
             onChange={(e) => setNodeData(node.id, { repeatCount: parseInt(e.target.value) || 1 })}
-            className="w-14 bg-zinc-50 border border-zinc-200/70 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all"
+            className="w-14 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200/70 dark:border-zinc-700/50 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-700 dark:text-zinc-300 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all"
           />
-          <span className="text-[10px] text-zinc-400">veces</span>
+          <span className="text-[10px] text-zinc-400 dark:text-zinc-500">veces</span>
         </div>
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Headers</label>
+        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Headers</label>
         <KeyValueEditor
           pairs={(d.headers as { key: string; value: string }[]) ?? []}
           onChange={(headers) => setNodeData(node.id, { headers })}
@@ -58,14 +58,14 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Body</label>
+        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Body</label>
         <div className="flex gap-1 mb-2">
           {['json', 'text', 'form'].map((t) => (
             <button
               key={t}
               onClick={() => setNodeData(node.id, { bodyType: t })}
               className={`px-2.5 py-1 rounded-lg text-[9px] font-medium uppercase tracking-wider transition-all ${
-                (d.bodyType ?? 'json') === t ? 'bg-zinc-100 text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'
+                (d.bodyType ?? 'json') === t ? 'bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300' : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:text-zinc-300'
               }`}
             >
               {t}
@@ -76,7 +76,7 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
           <textarea
             value={(d.body as string) ?? '{\n  \n}'}
             onChange={(e) => setNodeData(node.id, { body: e.target.value })}
-            className="w-full h-28 bg-zinc-50 border border-zinc-200/70 rounded-lg px-3 py-2 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all resize-none"
+            className="w-full h-28 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200/70 dark:border-zinc-700/50 rounded-lg px-3 py-2 text-[11px] font-mono text-zinc-700 dark:text-zinc-300 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all resize-none"
           />
         )}
         {(d.bodyType ?? 'json') === 'text' && (
@@ -84,7 +84,7 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
             value={(d.body as string) ?? ''}
             onChange={(e) => setNodeData(node.id, { body: e.target.value })}
             placeholder="Texto plano..."
-            className="w-full h-28 bg-zinc-50 border border-zinc-200/70 rounded-lg px-3 py-2 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all resize-none"
+            className="w-full h-28 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200/70 dark:border-zinc-700/50 rounded-lg px-3 py-2 text-[11px] font-mono text-zinc-700 dark:text-zinc-300 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all resize-none"
           />
         )}
         {(d.bodyType ?? 'json') === 'form' && (
@@ -96,14 +96,14 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Auth</label>
+        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Auth</label>
         <div className="flex gap-1">
           {['None', 'Basic', 'Bearer'].map((a) => (
             <button
               key={a}
               onClick={() => setNodeData(node.id, { auth: a })}
               className={`px-2.5 py-1 rounded-lg text-[9px] font-medium transition-all ${
-                (d.auth ?? 'None') === a ? 'bg-zinc-100 text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'
+                (d.auth ?? 'None') === a ? 'bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300' : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:text-zinc-300'
               }`}
             >
               {a}
@@ -115,7 +115,7 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
             value={(d.authValue as string) ?? ''}
             onChange={(e) => setNodeData(node.id, { authValue: e.target.value })}
             placeholder={d.auth === 'Bearer' ? 'Token' : 'usuario:contraseña'}
-            className="w-full bg-zinc-50 border border-zinc-200/70 rounded-lg px-3 py-1.5 text-[11px] font-mono text-zinc-700 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all"
+            className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200/70 dark:border-zinc-700/50 rounded-lg px-3 py-1.5 text-[11px] font-mono text-zinc-700 dark:text-zinc-300 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all"
           />
         )}
       </div>

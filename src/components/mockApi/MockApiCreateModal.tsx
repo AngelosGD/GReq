@@ -179,11 +179,11 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/15 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/15 dark:bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-tinted-lg border border-zinc-200/70 dark:border-zinc-700/70 w-[480px] max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800">
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Nueva API de prueba</h3>
-          <button onClick={onClose} className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150">
+          <button onClick={onClose} className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -259,7 +259,7 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
             {formErrors.fields && <p className="text-[10px] text-red-500 mt-1">{formErrors.fields}</p>}
 
             <details className="group mt-2">
-              <summary className="flex items-center gap-1 text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 cursor-pointer transition-colors">
+              <summary className="flex items-center gap-1 text-[9px] text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 cursor-pointer transition-colors">
                 <svg className="w-2 h-2 group-open:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                 Añadir en lote
               </summary>
@@ -299,7 +299,7 @@ export function MockApiCreateModal({ onClose, onCreate }: Props) {
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                     Añadir registro
                   </button>
-                  <button onClick={() => setFormSampleData(generateRows(formTempFields, 5))} className="text-[10px] font-medium text-emerald-600 hover:text-emerald-700 transition-colors">
+                  <button onClick={() => setFormSampleData(generateRows(formTempFields, 5))} className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors">
                     Generar 5 filas
                   </button>
                 </div>

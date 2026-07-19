@@ -13,10 +13,10 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
   return (
     <div
       className={`
-        relative bg-white rounded-xl transition-all duration-200
+        relative bg-white dark:bg-zinc-900 rounded-xl transition-all duration-200
         ${selected
           ? 'border-emerald-300/80 shadow-[0_0_0_1px_rgba(16,185,129,0.2),0_4px_14px_rgba(16,185,129,0.08)]'
-          : 'border-zinc-200/60 shadow-tinted hover:shadow-tinted-md hover:border-zinc-300/60'
+          : 'border-zinc-200/60 dark:border-zinc-700/60 shadow-tinted hover:shadow-tinted-md hover:border-zinc-300/60 dark:hover:border-zinc-600/60'
         }
       `}
     >
@@ -29,22 +29,22 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
       <div className="relative pl-5 pr-3.5 py-3">
         {data.title && (
           <div className="absolute -top-2 left-5 right-3.5 flex items-center gap-1.5">
-            <span className="text-[8px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded truncate max-w-[160px]">
+            <span className="text-[8px] font-semibold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded truncate max-w-[160px]">
               {data.title}
             </span>
-            <div className="h-px flex-1 bg-zinc-100" />
+            <div className="h-px flex-1 bg-zinc-100 dark:bg-zinc-800" />
           </div>
         )}
 
         <div className="flex items-center gap-2 mb-2.5">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_4px_rgba(16,185,129,0.3)]" />
-          <span className="text-[9px] font-semibold text-zinc-400 uppercase tracking-widest">URL</span>
+          <span className="text-[9px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">URL</span>
         </div>
 
         <div
           className={`
             flex items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-all duration-150
-            ${focused || url ? 'border-emerald-400/50 bg-white shadow-[0_0_0_2px_rgba(16,185,129,0.06)]' : 'border-zinc-200/50 bg-zinc-50/50 hover:border-zinc-300/60'}
+            ${focused || url ? 'border-emerald-400/50 bg-white dark:bg-zinc-800 shadow-[0_0_0_2px_rgba(16,185,129,0.06)]' : 'border-zinc-200/50 bg-zinc-50/50 dark:bg-zinc-800/50 hover:border-zinc-300/60'}
           `}
         >
           <svg
@@ -62,12 +62,12 @@ function UrlNode({ data, selected, id }: NodeProps<UrlNodeType>) {
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder="https://api.ejemplo.com"
-            className="nodrag w-full bg-transparent text-[11px] font-mono text-zinc-700 placeholder:text-zinc-400/40 outline-none"
+            className="nodrag w-full bg-transparent text-[11px] font-mono text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400/40 dark:placeholder-zinc-600 outline-none"
           />
           {url && (
             <button
               onClick={() => updateNodeData(id, { url: '' })}
-              className="nodrag p-0.5 rounded text-zinc-300 hover:text-zinc-500 hover:bg-zinc-100 transition-colors"
+              className="nodrag p-0.5 rounded text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             >
               <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

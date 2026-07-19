@@ -22,10 +22,10 @@ export function MockApiSidebar({
     .filter((a) => (a.name ?? '').toLowerCase().includes(search.toLowerCase()))
 
   return (
-    <aside className="w-60 flex-shrink-0 border-r border-zinc-200/60 flex flex-col">
+    <aside className="w-60 flex-shrink-0 border-r border-zinc-200/60 dark:border-zinc-700/60 flex flex-col">
       <div className="flex items-center justify-between px-4 h-11">
         <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">APIs de prueba</h2>
-        <button onClick={onClose} className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150">
+        <button onClick={onClose} className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150">
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>

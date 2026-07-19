@@ -396,7 +396,9 @@ export function MainApp() {
     const a = document.createElement('a')
     a.href = url
     a.download = `flow-${Date.now()}.json`
+    document.body.appendChild(a)
     a.click()
+    document.body.removeChild(a)
     URL.revokeObjectURL(url)
   }, [nodes, edges, saveGroupsToHistory])
 
@@ -426,8 +428,8 @@ export function MainApp() {
 
   return (
     <ReactFlowProvider>
-      <div className="h-[100dvh] flex flex-col bg-white dark:bg-zinc-950" style={{ fontFamily: "'Geist', system-ui, sans-serif" }}>
-        <header className="flex items-center justify-between px-5 py-3 border-b border-zinc-200/70 dark:border-zinc-800/60 flex-shrink-0">
+      <div className="h-[100dvh] flex flex-col bg-white dark:bg-zinc-950 transition-colors duration-200" style={{ fontFamily: "'Geist', system-ui, sans-serif" }}>
+        <header className="flex items-center justify-between px-5 py-3 border-b border-zinc-200/70 dark:border-zinc-800/60 flex-shrink-0 transition-colors duration-200">
           <div className="flex items-center gap-3">
             <Logo size={22} className="shrink-0" />
             <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">GReq</span>
@@ -536,7 +538,7 @@ export function MainApp() {
         </header>
 
         <div className="flex flex-1 overflow-hidden">
-          <aside className="w-52 flex-shrink-0 border-r border-zinc-200/60 dark:border-zinc-800/50 bg-white dark:bg-zinc-950 flex flex-col py-2 gap-0.5">
+          <aside className="w-52 flex-shrink-0 border-r border-zinc-200/60 dark:border-zinc-800/50 bg-white dark:bg-zinc-950 flex flex-col py-2 gap-0.5 transition-colors duration-200">
             {sidebarMode === 'options' ? (
               <>
                 <div className="px-3 pb-1.5">

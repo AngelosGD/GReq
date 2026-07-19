@@ -24,10 +24,10 @@ function MethodNode({ data, selected, id }: NodeProps<MethodNodeType>) {
   return (
     <div
       className={`
-        relative bg-white rounded-xl transition-all duration-200
+        relative bg-white dark:bg-zinc-900 rounded-xl transition-all duration-200
         ${selected
-          ? 'border-zinc-300/80 shadow-tinted-md'
-          : 'border-zinc-200/60 shadow-tinted hover:shadow-tinted-md hover:border-zinc-300/60'
+          ? 'border-zinc-300/80 dark:border-zinc-600/80 shadow-tinted-md'
+          : 'border-zinc-200/60 dark:border-zinc-700/60 shadow-tinted hover:shadow-tinted-md hover:border-zinc-300/60 dark:hover:border-zinc-600/60'
         }
       `}
       style={{ minWidth: 180 }}
@@ -46,9 +46,9 @@ function MethodNode({ data, selected, id }: NodeProps<MethodNodeType>) {
             </span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-[9px] text-zinc-400 font-medium">Solicitud</span>
+            <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium">Solicitud</span>
             {data.repeatCount && data.repeatCount > 1 && (
-              <span className="text-[8px] font-mono font-semibold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded leading-none">
+              <span className="text-[8px] font-mono font-semibold text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded leading-none">
                 ×{data.repeatCount}
               </span>
             )}
