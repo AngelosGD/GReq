@@ -1,6 +1,31 @@
+import { useState } from 'react'
 import type { Node } from '@xyflow/react'
 
+function simpleDiff(a: string, b: string): { type: 'same' | 'added' | 'removed'; line: string }[] {
+  const linesA = a.split('\n')
+  const linesB = b.split('\n')
+  const maxLen = Math.max(linesA.length, linesB.length)
+  const result: { type: 'same' | 'added' | 'removed'; line: string }[] = []
+  for (let i = 0; i < maxLen; i++) {
+    if (i >= linesA.length) {
+      result.push({ type: 'added', line: linesB[i] })
+    } else if (i >= linesB.length) {
+      result.push({ type: 'removed', line: linesA[i] })
+    } else if (linesA[i] === linesB[i]) {
+      result.push({ type: 'same', line: linesA[i] })
+    } else {
+      result.push({ type: 'removed', line: linesA[i] })
+      result.push({ type: 'added', line: linesB[i] })
+    }
+  }
+  return result
+}
+
 export function ResponseSection({ node, setNodeData }: { node: Node; setNodeData: (id: string, data: Record<string, unknown>) => void }) {
+  const [prettify, setPrettify] = useState(false)
+  const [diffMode, setDiffMode] = useState(false)
+  const [diffTargetA, setDiffTargetA] = useState(0)
+  const [diffTargetB, setDiffTargetB] = useState(0)
   const d = (node.data as Record<string, unknown>) ?? {}
   const responsesList = d.responses as unknown[] | undefined
   const singleRes = d.response as unknown
@@ -8,21 +33,66 @@ export function ResponseSection({ node, setNodeData }: { node: Node; setNodeData
   const allRes = responsesList ?? (singleRes ? [singleRes] : [])
   if (allRes.length === 0) return null
 
+  const prettyBody = (body: string) => {
+    try { return JSON.stringify(JSON.parse(body), null, 2) } catch { return body }
+  }
+
   return (
     <div className="space-y-3 border-t border-zinc-100 dark:border-zinc-800 pt-4">
       <div className="flex items-center justify-between">
         <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.1em]">
           {allRes.length > 1 ? `Respuestas (${allRes.length})` : 'Respuesta'}
         </label>
-        <button
-          onClick={() => setNodeData(node.id, { response: undefined, responses: undefined })}
-          className="text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150"
-        >
-          Limpiar
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setPrettify(!prettify)}
+            className="text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150"
+          >
+            {prettify ? 'Crudo' : 'Prettify'}
+          </button>
+          {allRes.length > 1 && (
+            <button
+              onClick={() => setDiffMode(!diffMode)}
+              className="text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150"
+            >
+              {diffMode ? 'Normal' : 'Diff'}
+            </button>
+          )}
+          <button
+            onClick={() => setNodeData(node.id, { response: undefined, responses: undefined })}
+            className="text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150"
+          >
+            Limpiar
+          </button>
+        </div>
       </div>
 
-      {allRes.map((res: any, idx: number) => {
+      {diffMode ? (
+        <div>
+          <div className="flex gap-2 mb-2">
+            <select value={diffTargetA} onChange={(e) => setDiffTargetA(Number(e.target.value))} className="text-[10px] px-1 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300">
+              {allRes.map((_, i) => <option key={i} value={i}>Respuesta {i+1}</option>)}
+            </select>
+            <span className="text-[10px] text-zinc-400 self-center">vs</span>
+            <select value={diffTargetB} onChange={(e) => setDiffTargetB(Number(e.target.value))} className="text-[10px] px-1 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300">
+              {allRes.map((_, i) => <option key={i} value={i}>Respuesta {i+1}</option>)}
+            </select>
+          </div>
+          <pre className="w-full max-h-96 overflow-auto bg-zinc-50/80 dark:bg-zinc-900/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg px-3 py-2.5 text-[10px] font-mono leading-relaxed whitespace-pre-wrap break-all">
+            {simpleDiff(
+              prettyBody(typeof allRes[diffTargetA] === 'object' && allRes[diffTargetA] !== null ? (allRes[diffTargetA] as any).body ?? '' : ''),
+              prettyBody(typeof allRes[diffTargetB] === 'object' && allRes[diffTargetB] !== null ? (allRes[diffTargetB] as any).body ?? '' : ''),
+            ).map((line, i) => (
+              <div key={i} className={`${line.type === 'added' ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400' : line.type === 'removed' ? 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400' : 'text-zinc-700 dark:text-zinc-300'}`}>
+                <span className="select-none w-4 inline-block text-zinc-300">{line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}</span>
+                {line.line}
+              </div>
+            ))}
+          </pre>
+        </div>
+      ) : (
+
+      allRes.map((res: any, idx: number) => {
         const statusColor =
           res.status >= 200 && res.status < 300 ? 'text-emerald-600'
           : res.status >= 300 && res.status < 400 ? 'text-amber-600'
@@ -70,12 +140,14 @@ export function ResponseSection({ node, setNodeData }: { node: Node; setNodeData
             <div>
               <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.1em] block mb-1.5">Body</label>
               <pre className="w-full max-h-60 overflow-auto bg-zinc-50/80 dark:bg-zinc-900/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg px-3 py-2.5 text-[10px] font-mono text-zinc-700 dark:text-zinc-300 leading-relaxed whitespace-pre-wrap break-all">
-                {res.body}
+                {prettify ? (() => { try { return JSON.stringify(JSON.parse(res.body), null, 2) } catch { return res.body } })() : res.body}
               </pre>
             </div>
           </div>
         )
-      })}
+      })
+      )
+      }
     </div>
   )
 }

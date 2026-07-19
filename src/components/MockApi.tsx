@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useAuthStore } from '../store/authStore'
+import { useEnvStore } from '../store/envStore'
 import { getMockApis, saveMockApi, deleteMockApi } from '../lib/database'
 import { trackServer, untrackServer, getActiveServers, clearTrackedServers } from '../lib/runningServers'
 import { parseOpenApiSpec } from '../lib/openapi'
@@ -130,8 +131,12 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
       const methodConfigs = Object.entries(api.methodBodies ?? {}).map(([m, cfg]) => ({
         method: m, status: cfg.statusCode ?? api.statusCode, headers: cfg.responseHeaders ?? reqHeaders, body: cfg.responseBody || defaultBody,
       }))
+      const envVars: Record<string, string> = {}
+      for (const v of useEnvStore.getState().getActiveVars()) {
+        envVars[v.key] = v.value
+      }
       const info = await invokeWithTimeout<{ url: string; id: string }>('start_mock_server', {
-        config: { path: api.path, methods: api.methods, status: api.statusCode, headers: reqHeaders, body: api.responseBody || defaultBody, port: api.port, delayMs: api.delayMs, methodConfigs, fields: api.fields, sampleData: api.sampleData },
+        config: { path: api.path, methods: api.methods, status: api.statusCode, headers: reqHeaders, body: api.responseBody || defaultBody, port: api.port, delayMs: api.delayMs, methodConfigs, fields: api.fields, sampleData: api.sampleData, rateLimit: 0, envVars },
       })
       const url = new URL(info.url)
       const port = Number(url.port)

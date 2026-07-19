@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::{
-    extract::{Path, State},
-    http::Method,
+    extract::{Path, Query, State},
+    http::{HeaderName, HeaderValue, Method},
     response::IntoResponse,
     routing::any,
     Json, Router,
@@ -50,6 +50,10 @@ pub struct MockConfig {
     pub fields: Vec<FieldDef>,
     #[serde(default)]
     pub sample_data: Vec<HashMap<String, String>>,
+    #[serde(default)]
+    pub rate_limit: u64,
+    #[serde(default)]
+    pub env_vars: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -77,8 +81,12 @@ struct AppState {
     fields: Vec<FieldDef>,
     sample_data: Vec<HashMap<String, String>>,
     base_path: String,
+    bind_port: u16,
     last_request: Mutex<Option<RequestLog>>,
     request_history: Mutex<Vec<RequestLog>>,
+    rate_limit: u64,
+    rate_window: Mutex<Vec<Instant>>,
+    env_vars: HashMap<String, String>,
 }
 
 fn pseudo_random(seed: u128) -> u64 {
@@ -126,13 +134,11 @@ fn dynamic_val(template: &str) -> String {
         "$timestamp" => {
             let secs = now.as_secs();
             let nanos = now.subsec_nanos();
-            // ISO 8601 approximation
             let days_since_epoch = secs / 86400;
             let time_secs = secs % 86400;
             let hours = time_secs / 3600;
             let minutes = (time_secs % 3600) / 60;
             let seconds = time_secs % 60;
-            // Simple date calculation from days since epoch (1970-01-01)
             let mut y = 1970i64;
             let mut d = days_since_epoch as i64;
             loop {
@@ -223,6 +229,17 @@ fn resolve_dynamic(body: &str) -> String {
     result
 }
 
+fn resolve_env_vars(body: &str, env_vars: &HashMap<String, String>) -> String {
+    let mut result = body.to_string();
+    for (key, val) in env_vars {
+        let template = format!("{{{{env.{}}}}}", key);
+        if result.contains(&template) {
+            result = result.replace(&template, val);
+        }
+    }
+    result
+}
+
 fn add_cors_headers(resp: &mut axum::response::Response) {
     resp.headers_mut().insert(
         axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
@@ -307,24 +324,42 @@ fn has_smart_data(state: &AppState) -> bool {
     !state.sample_data.is_empty() || !state.fields.is_empty()
 }
 
-fn handle_get(state: &AppState, id_segment: Option<&str>, eff_body: &str, eff_status: u16) -> (axum::http::StatusCode, String) {
+fn handle_get(
+    state: &AppState,
+    id_segment: Option<&str>,
+    eff_body: &str,
+    eff_status: u16,
+    page: Option<u64>,
+    limit: Option<u64>,
+) -> (axum::http::StatusCode, String, Option<usize>) {
+    let page_val = page.unwrap_or(1);
+    let limit_val = limit.unwrap_or(10).max(1);
+
     if !state.sample_data.is_empty() {
         match id_segment {
             Some(id_str) => {
                 let idx = id_str.parse::<usize>().unwrap_or(1).saturating_sub(1);
                 if idx < state.sample_data.len() {
                     let item = build_sample_item(&state.fields, &state.sample_data[idx], (idx + 1) as u64);
-                    (axum::http::StatusCode::OK, serde_json::to_string(&item).unwrap_or_else(|_| eff_body.to_string()))
+                    (axum::http::StatusCode::OK, serde_json::to_string(&item).unwrap_or_else(|_| eff_body.to_string()), None)
                 } else {
                     let item = build_sample_item(&state.fields, &state.sample_data[0], 1);
-                    (axum::http::StatusCode::OK, serde_json::to_string(&item).unwrap_or_else(|_| eff_body.to_string()))
+                    (axum::http::StatusCode::OK, serde_json::to_string(&item).unwrap_or_else(|_| eff_body.to_string()), None)
                 }
             }
             None => {
-                let items: Vec<serde_json::Value> = state.sample_data.iter().enumerate().map(|(i, record)| {
+                let all_items: Vec<serde_json::Value> = state.sample_data.iter().enumerate().map(|(i, record)| {
                     build_sample_item(&state.fields, record, (i + 1) as u64)
                 }).collect();
-                (axum::http::StatusCode::OK, serde_json::to_string(&items).unwrap_or_else(|_| eff_body.to_string()))
+                let total = all_items.len();
+                let sliced: Vec<&serde_json::Value> = if page.is_some() || limit.is_some() {
+                    let skip = (page_val.saturating_sub(1)) as usize * limit_val as usize;
+                    all_items.iter().skip(skip).take(limit_val as usize).collect()
+                } else {
+                    all_items.iter().collect()
+                };
+                let body = serde_json::to_string(&sliced).unwrap_or_else(|_| eff_body.to_string());
+                (axum::http::StatusCode::OK, body, Some(total))
             }
         }
     } else if !state.fields.is_empty() {
@@ -332,15 +367,23 @@ fn handle_get(state: &AppState, id_segment: Option<&str>, eff_body: &str, eff_st
             Some(id_str) => {
                 let id_num = id_str.parse::<u64>().unwrap_or(1);
                 let item = build_item(&state.fields, id_num);
-                (axum::http::StatusCode::OK, serde_json::to_string(&item).unwrap_or_else(|_| eff_body.to_string()))
+                (axum::http::StatusCode::OK, serde_json::to_string(&item).unwrap_or_else(|_| eff_body.to_string()), None)
             }
             None => {
-                let items: Vec<serde_json::Value> = (1..=3).map(|i| build_item(&state.fields, i)).collect();
-                (axum::http::StatusCode::OK, serde_json::to_string(&items).unwrap_or_else(|_| eff_body.to_string()))
+                let all_items: Vec<serde_json::Value> = (1..=3).map(|i| build_item(&state.fields, i)).collect();
+                let total = all_items.len();
+                let sliced: Vec<&serde_json::Value> = if page.is_some() || limit.is_some() {
+                    let skip = (page_val.saturating_sub(1)) as usize * limit_val as usize;
+                    all_items.iter().skip(skip).take(limit_val as usize).collect()
+                } else {
+                    all_items.iter().collect()
+                };
+                let body = serde_json::to_string(&sliced).unwrap_or_else(|_| eff_body.to_string());
+                (axum::http::StatusCode::OK, body, Some(total))
             }
         }
     } else {
-        (axum::http::StatusCode::from_u16(eff_status).unwrap_or(axum::http::StatusCode::OK), eff_body.to_string())
+        (axum::http::StatusCode::from_u16(eff_status).unwrap_or(axum::http::StatusCode::OK), eff_body.to_string(), None)
     }
 }
 
@@ -410,10 +453,30 @@ fn handle_update(state: &AppState, id_segment: Option<String>, body: &str, eff_b
     (axum::http::StatusCode::OK, serde_json::to_string(&resp).unwrap_or_else(|_| eff_body.to_string()))
 }
 
+fn build_link_header(base_url: &str, total: usize, page: u64, limit: u64) -> String {
+    let last_page = ((total as f64) / (limit as f64)).ceil() as u64;
+    let mut links = Vec::new();
+
+    links.push(format!("<{base_url}?page=1&limit={limit}>; rel=\"first\""));
+
+    if page > 1 {
+        links.push(format!("<{base_url}?page={}&limit={limit}>; rel=\"prev\"", page - 1));
+    }
+
+    if page < last_page {
+        links.push(format!("<{base_url}?page={}&limit={limit}>; rel=\"next\"", page + 1));
+    }
+
+    links.push(format!("<{base_url}?page={last_page}&limit={limit}>; rel=\"last\""));
+
+    links.join(", ")
+}
+
 async fn mock_handler(
     State(state): State<Arc<AppState>>,
     method: Method,
     Path(req_path): Path<String>,
+    Query(query): Query<HashMap<String, String>>,
     body: String,
 ) -> axum::response::Response {
     if method == Method::OPTIONS {
@@ -429,6 +492,27 @@ async fn mock_handler(
         let mut resp = axum::http::StatusCode::METHOD_NOT_ALLOWED.into_response();
         add_cors_headers(&mut resp);
         return resp;
+    }
+
+    // Rate limiting
+    if state.rate_limit > 0 {
+        let mut window = state.rate_window.lock().await;
+        let now = Instant::now();
+        window.retain(|t| now.duration_since(*t).as_secs() < 60);
+        if window.len() as u64 >= state.rate_limit {
+            let mut resp = axum::http::StatusCode::TOO_MANY_REQUESTS.into_response();
+            resp.headers_mut().insert(
+                axum::http::header::RETRY_AFTER,
+                HeaderValue::from_static("60"),
+            );
+            resp.headers_mut().insert(
+                HeaderName::from_static("x-ratelimit-remaining"),
+                HeaderValue::from_static("0"),
+            );
+            add_cors_headers(&mut resp);
+            return resp;
+        }
+        window.push(now);
     }
 
     let log_entry = RequestLog {
@@ -456,20 +540,67 @@ async fn mock_handler(
 
     let id_segment = extract_id(&state.base_path, &req_path);
 
-    let (status, resp_body) = match method_str.as_str() {
-        "GET" => handle_get(&state, id_segment.as_deref(), &eff_body, eff_status),
-        "POST" => handle_post(&state, &body, &eff_body),
-        "DELETE" => handle_delete(&state, id_segment, &eff_body),
-        _ => handle_update(&state, id_segment, &body, &eff_body),
+    let page = query.get("page").and_then(|v| v.parse::<u64>().ok()).filter(|v| *v > 0);
+    let limit = query.get("limit").and_then(|v| v.parse::<u64>().ok()).filter(|v| *v > 0);
+
+    let (status, resp_body, total_items) = match method_str.as_str() {
+        "GET" => handle_get(&state, id_segment.as_deref(), &eff_body, eff_status, page, limit),
+        "POST" => {
+            let (s, b) = handle_post(&state, &body, &eff_body);
+            (s, b, None)
+        }
+        "DELETE" => {
+            let (s, b) = handle_delete(&state, id_segment, &eff_body);
+            (s, b, None)
+        }
+        _ => {
+            let (s, b) = handle_update(&state, id_segment, &body, &eff_body);
+            (s, b, None)
+        }
     };
 
     let resolved_body = resolve_dynamic(&resp_body);
+    let resolved_body = resolve_env_vars(&resolved_body, &state.env_vars);
     let mut resp = axum::response::Response::new(axum::body::Body::from(resolved_body));
     *resp.status_mut() = status;
     resp.headers_mut().insert(
         axum::http::header::CONTENT_TYPE,
         axum::http::HeaderValue::from_static("application/json"),
     );
+
+    // Rate limit remaining header
+    if state.rate_limit > 0 {
+        let window = state.rate_window.lock().await;
+        let remaining = state.rate_limit.saturating_sub(window.len() as u64);
+        resp.headers_mut().insert(
+            HeaderName::from_static("x-ratelimit-remaining"),
+            HeaderValue::from_str(&remaining.to_string()).unwrap_or(HeaderValue::from_static("0")),
+        );
+    }
+
+    // Pagination headers
+    if let Some(total) = total_items {
+        let page_val = page.unwrap_or(1);
+        let limit_val = limit.unwrap_or(10);
+        resp.headers_mut().insert(
+            HeaderName::from_static("x-total-count"),
+            HeaderValue::from_str(&total.to_string()).unwrap(),
+        );
+        let clean_path = state.base_path.trim_matches('/');
+        let base_url = if clean_path.is_empty() {
+            format!("http://127.0.0.1:{}", state.bind_port)
+        } else {
+            format!("http://127.0.0.1:{}/{}", state.bind_port, clean_path)
+        };
+        let link = build_link_header(&base_url, total, page_val, limit_val);
+        if let Ok(val) = HeaderValue::from_str(&link) {
+            resp.headers_mut().insert(
+                axum::http::header::LINK,
+                val,
+            );
+        }
+    }
+
     for h in eff_headers {
         if h.key.is_empty() {
             continue;
@@ -520,26 +651,6 @@ pub async fn start_mock_server(
 
     let clean_path = config.path.trim_start_matches('/').to_string();
 
-    let app_state = Arc::new(AppState {
-        methods: config.methods.clone(),
-        method_configs: config.method_configs.clone(),
-        default_status: config.status,
-        default_headers: config.headers.clone(),
-        default_body: config.body.clone(),
-        delay_ms: config.delay_ms,
-        fields: config.fields.clone(),
-        sample_data: config.sample_data.clone(),
-        base_path: clean_path.clone(),
-        last_request: Mutex::new(None),
-        request_history: Mutex::new(Vec::new()),
-    });
-
-    let app = Router::new()
-        .route("/__inspect", any(inspect_handler))
-        .route("/__history", any(history_handler))
-        .route("/*path", any(mock_handler))
-        .with_state(app_state);
-
     let addr = match config.port {
         Some(p) => format!("127.0.0.1:{}", p),
         None => "127.0.0.1:0".to_string(),
@@ -552,6 +663,30 @@ pub async fn start_mock_server(
         .local_addr()
         .map_err(|e| AppError::Server(format!("Error al obtener puerto: {}", e)))?
         .port();
+
+    let app_state = Arc::new(AppState {
+        methods: config.methods.clone(),
+        method_configs: config.method_configs.clone(),
+        default_status: config.status,
+        default_headers: config.headers.clone(),
+        default_body: config.body.clone(),
+        delay_ms: config.delay_ms,
+        fields: config.fields.clone(),
+        sample_data: config.sample_data.clone(),
+        base_path: clean_path.clone(),
+        bind_port: port,
+        last_request: Mutex::new(None),
+        request_history: Mutex::new(Vec::new()),
+        rate_limit: config.rate_limit,
+        rate_window: Mutex::new(Vec::new()),
+        env_vars: config.env_vars,
+    });
+
+    let app = Router::new()
+        .route("/__inspect", any(inspect_handler))
+        .route("/__history", any(history_handler))
+        .route("/*path", any(mock_handler))
+        .with_state(app_state);
 
     let url = if clean_path.is_empty() {
         format!("http://127.0.0.1:{}", port)

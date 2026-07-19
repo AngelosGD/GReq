@@ -37,6 +37,7 @@ import { EnvPanel } from './EnvPanel'
 import { useEnvStore } from '../store/envStore'
 import { ExportCodePanel } from './ExportCodePanel'
 
+
 type SidebarMode = 'options' | 'nodes'
 
 const initialNodes: Node[] = []
@@ -62,6 +63,7 @@ export function MainApp() {
   const [showGithubSection, setShowGithubSection] = useState(false)
   const [showEnvPanel, setShowEnvPanel] = useState(false)
   const [showExportCode, setShowExportCode] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
   const [dark, setDark] = useState(() => localStorage.getItem('greq-theme') === 'dark')
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark)
@@ -190,6 +192,7 @@ export function MainApp() {
       const lastResponse = allResponsesArr[allResponsesArr.length - 1]
       setNodeData(nodeId, { response: lastResponse, responses: allResponsesArr })
       setResponse(nodeId, lastResponse)
+      useExecStore.getState().pushToHistory(nodeId, lastResponse)
     } catch (err) {
       const errResp: StoredResponse = {
         status: 0,
@@ -200,6 +203,7 @@ export function MainApp() {
       }
       setNodeData(nodeId, { response: errResp })
       setResponse(nodeId, errResp)
+      useExecStore.getState().pushToHistory(nodeId, errResp)
     } finally {
       setLoading(nodeId, false)
     }
@@ -426,6 +430,32 @@ export function MainApp() {
     input.click()
   }, [setNodes, setEdges, takeSnapshot])
 
+  const autoLayout = useCallback(() => {
+    takeSnapshot(nodes, edges)
+    const urlNodes = nodes.filter((n) => n.type === 'url')
+    const methodNodes = nodes.filter((n) => n.type === 'method')
+    const xSpacing = 350
+    const ySpacing = 120
+    const startY = 60
+    const urlUpdates = urlNodes.map((n, i) => ({
+      id: n.id,
+      position: { x: 80, y: startY + i * ySpacing * Math.max(1, Math.ceil(methodNodes.length / Math.max(1, urlNodes.length))) }
+    }))
+    const methodUpdates = methodNodes.map((n) => {
+      const connectedEdge = edges.find((e) => e.target === n.id)
+      const sourceUrl = connectedEdge ? urlNodes.find((u) => u.id === connectedEdge.source) : undefined
+      const sourceIdx = sourceUrl ? urlNodes.indexOf(sourceUrl) : 0
+      return {
+        id: n.id,
+        position: { x: 80 + xSpacing, y: startY + sourceIdx * ySpacing * Math.max(1, Math.ceil(methodNodes.length / Math.max(1, urlNodes.length))) + (methodNodes.indexOf(n) * ySpacing) % (ySpacing * 3) }
+      }
+    })
+    setNodes((nds) => nds.map((n) => {
+      const update = [...urlUpdates, ...methodUpdates].find((u) => u.id === n.id)
+      return update ? { ...n, position: update.position } : n
+    }))
+  }, [nodes, edges, setNodes, takeSnapshot])
+
   return (
     <ReactFlowProvider>
       <div className="h-[100dvh] flex flex-col bg-white dark:bg-zinc-950 transition-colors duration-200" style={{ fontFamily: "'Geist', system-ui, sans-serif" }}>
@@ -444,6 +474,11 @@ export function MainApp() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
               </svg>
             </button>
+            {canUndo && (
+              <span className="flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full bg-zinc-200 dark:bg-zinc-700 text-[8px] font-semibold text-zinc-500 dark:text-zinc-400 leading-none">
+                {useFlowStore.getState().past.length}
+              </span>
+            )}
             <button
               onClick={redo}
               disabled={!canRedo}
@@ -475,11 +510,29 @@ export function MainApp() {
               </svg>
               Cargar
             </button>
+            <button
+              onClick={autoLayout}
+              className="p-1.5 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
+              title="Auto-layout nodos"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+              </svg>
+            </button>
           </div>
           <AuthGuard label="Inicia sesión para buscar grupos guardados">
             <NodeSearch nodes={nodes} edges={edges} />
           </AuthGuard>
           <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => setShowShortcuts(true)}
+              className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
+              aria-label="Atajos de teclado"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+              </svg>
+            </button>
             <button
               onClick={() => setDark((p) => !p)}
               className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
@@ -638,9 +691,11 @@ export function MainApp() {
                     <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
                     </svg>
-                    Exportar código
-                  </button>
-                </div>
+                      Exportar código
+                    </button>
+                  </div>
+
+
 
                 <div className="flex-1" />
 
@@ -876,6 +931,23 @@ export function MainApp() {
       )}
 
       {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
+
+      {showShortcuts && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/15 dark:bg-black/40" onClick={() => setShowShortcuts(false)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl shadow-black/8 dark:shadow-black/40 w-80 p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 mb-4">Atajos de teclado</h3>
+            <div className="space-y-2.5 text-xs">
+              <div className="flex justify-between"><span className="text-zinc-500 dark:text-zinc-400">Deshacer</span><kbd className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-mono">Ctrl+Z</kbd></div>
+              <div className="flex justify-between"><span className="text-zinc-500 dark:text-zinc-400">Rehacer</span><kbd className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-mono">Ctrl+Shift+Z</kbd></div>
+              <div className="flex justify-between"><span className="text-zinc-500 dark:text-zinc-400">Rehacer</span><kbd className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-mono">Ctrl+Y</kbd></div>
+              <div className="flex justify-between"><span className="text-zinc-500 dark:text-zinc-400">Eliminar nodo</span><kbd className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-mono">Supr</kbd></div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+              <button onClick={() => setShowShortcuts(false)} className="w-full py-2 rounded-lg text-xs font-semibold bg-zinc-900 dark:bg-zinc-700 text-white hover:bg-zinc-800 dark:hover:bg-zinc-600 transition-all">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </ReactFlowProvider>
   )
 }
