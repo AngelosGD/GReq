@@ -102,6 +102,12 @@ html {
   scroll-behavior: smooth;
 }
 
+.dark body,
+.dark #root {
+  background: #09090b;
+  color: #d4d4d8;
+}
+
 ::selection {
   background-color: rgb(16 185 129 / 0.25);
   color: inherit;

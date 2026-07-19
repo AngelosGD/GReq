@@ -62,6 +62,11 @@ export function MainApp() {
   const [showGithubSection, setShowGithubSection] = useState(false)
   const [showEnvPanel, setShowEnvPanel] = useState(false)
   const [showExportCode, setShowExportCode] = useState(false)
+  const [dark, setDark] = useState(() => localStorage.getItem('greq-theme') === 'dark')
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('greq-theme', dark ? 'dark' : 'light')
+  }, [dark])
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
   const takeSnapshot = useFlowStore((s) => s.takeSnapshot)
@@ -421,16 +426,16 @@ export function MainApp() {
 
   return (
     <ReactFlowProvider>
-      <div className="h-[100dvh] flex flex-col bg-white" style={{ fontFamily: "'Geist', system-ui, sans-serif" }}>
-        <header className="flex items-center justify-between px-5 py-3 border-b border-zinc-200/70 flex-shrink-0">
+      <div className="h-[100dvh] flex flex-col bg-white dark:bg-zinc-950" style={{ fontFamily: "'Geist', system-ui, sans-serif" }}>
+        <header className="flex items-center justify-between px-5 py-3 border-b border-zinc-200/70 dark:border-zinc-800/60 flex-shrink-0">
           <div className="flex items-center gap-3">
             <Logo size={22} className="shrink-0" />
-            <span className="text-sm font-bold text-zinc-900 tracking-tight">GReq</span>
-            <div className="w-px h-4 bg-zinc-200" />
+            <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">GReq</span>
+            <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700" />
             <button
               onClick={undo}
               disabled={!canUndo}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              className="p-1.5 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
               title="Deshacer (Ctrl+Z)"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -440,17 +445,17 @@ export function MainApp() {
             <button
               onClick={redo}
               disabled={!canRedo}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              className="p-1.5 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
               title="Rehacer (Ctrl+Shift+Z)"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 15l6-6m0 0l-6-6m6 6H9a6 6 0 000 12h3" />
               </svg>
             </button>
-            <div className="w-px h-4 bg-zinc-200" />
+            <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700" />
             <button
               onClick={saveFlow}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 transition-all"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
               title="Guardar flujo"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -460,7 +465,7 @@ export function MainApp() {
             </button>
             <button
               onClick={loadFlow}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 transition-all"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
               title="Cargar flujo"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -472,10 +477,24 @@ export function MainApp() {
           <AuthGuard label="Inicia sesión para buscar grupos guardados">
             <NodeSearch nodes={nodes} edges={edges} />
           </AuthGuard>
-          <div className="relative group">
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => setDark((p) => !p)}
+              className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
+              aria-label="Alternar tema"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                {dark ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+                )}
+              </svg>
+            </button>
+            <div className="relative group">
             <button
               onClick={goToSettings}
-              className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 active:scale-95 transition-all"
+              className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
               aria-label="Configuración"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -485,12 +504,12 @@ export function MainApp() {
             </button>
             {user && (
               <div className="absolute right-0 top-full mt-1.5 w-44 bg-white dark:bg-zinc-900 rounded-xl shadow-tinted-lg border border-zinc-200/80 dark:border-zinc-700/80 z-30 py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-                <div className="px-3 py-2 text-[11px] text-zinc-500 truncate border-b border-zinc-100">
+                <div className="px-3 py-2 text-[11px] text-zinc-500 dark:text-zinc-400 truncate border-b border-zinc-100 dark:border-zinc-700/50">
                   {user.email}
                 </div>
                 <button
                   onClick={() => setShowProfile(true)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
                 >
                   <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -503,20 +522,21 @@ export function MainApp() {
                     setUser(null)
                     goToAuth()
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-red-600 hover:bg-red-50 transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
                   </svg>
                   Cerrar sesión
                 </button>
-              </div>
-            )}
+            </div>
+          )}
+          </div>
           </div>
         </header>
 
         <div className="flex flex-1 overflow-hidden">
-          <aside className="w-52 flex-shrink-0 border-r border-zinc-200/60 bg-white flex flex-col py-2 gap-0.5">
+          <aside className="w-52 flex-shrink-0 border-r border-zinc-200/60 dark:border-zinc-800/50 bg-white dark:bg-zinc-950 flex flex-col py-2 gap-0.5">
             {sidebarMode === 'options' ? (
               <>
                 <div className="px-3 pb-1.5">
@@ -524,10 +544,10 @@ export function MainApp() {
                     <button
                       onClick={() => { setSidebarMode('nodes'); setShowMockApi(false); setShowGithubSection(false); setShowEnvPanel(false); setShowExportCode(false); }}
                       className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
-                        !showMockApi && !showGithubSection ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
+                        !showMockApi && !showGithubSection ? 'text-zinc-800 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
                       }`}
                     >
-                      {!showMockApi && !showGithubSection && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800" />}
+                      {!showMockApi && !showGithubSection && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800 dark:bg-zinc-100" />}
                       <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
                       </svg>
@@ -541,7 +561,7 @@ export function MainApp() {
                     <div className="relative">
                       <button
                         onClick={() => setShowHistory(true)}
-                        className="flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50 transition-all active:scale-[0.98]"
+                        className="flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-all active:scale-[0.98]"
                       >
                         <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -558,10 +578,10 @@ export function MainApp() {
                       <button
                         onClick={() => { setShowMockApi(true); setShowGithubSection(false); setShowEnvPanel(false); setShowExportCode(false); setSelectedNode(null); setSidebarMode('options'); }}
                         className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
-                          showMockApi ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
+                          showMockApi ? 'text-zinc-800 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
                         }`}
                       >
-                        {showMockApi && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800" />}
+                        {showMockApi && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800 dark:bg-zinc-100" />}
                         <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
                         </svg>
@@ -576,10 +596,10 @@ export function MainApp() {
                     <button
                       onClick={() => { setShowGithubSection(true); setShowMockApi(false); setShowEnvPanel(false); setShowExportCode(false); setSelectedNode(null); setSidebarMode('options'); }}
                       className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
-                        showGithubSection ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
+                        showGithubSection ? 'text-zinc-800 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
                       }`}
                     >
-                      {showGithubSection && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800" />}
+                      {showGithubSection && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800 dark:bg-zinc-100" />}
                       <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0022 12c0-5.523-4.477-10-10-10z" />
                       </svg>
@@ -593,10 +613,10 @@ export function MainApp() {
                     <button
                       onClick={() => { setShowEnvPanel(true); setShowMockApi(false); setShowGithubSection(false); setShowExportCode(false); setSelectedNode(null); setSidebarMode('options'); }}
                       className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
-                        showEnvPanel ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
+                        showEnvPanel ? 'text-zinc-800 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
                       }`}
                     >
-                      {showEnvPanel && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800" />}
+                      {showEnvPanel && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800 dark:bg-zinc-100" />}
                       <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
                       </svg>
@@ -609,10 +629,10 @@ export function MainApp() {
                   <button
                     onClick={() => { setShowExportCode(true); setShowMockApi(false); setShowGithubSection(false); setShowEnvPanel(false); setSelectedNode(null); setSidebarMode('options'); }}
                     className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] ${
-                      showExportCode ? 'text-zinc-800 bg-zinc-100' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50'
+                      showExportCode ? 'text-zinc-800 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
                     }`}
                   >
-                    {showExportCode && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800" />}
+                    {showExportCode && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800 dark:bg-zinc-100" />}
                     <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
                     </svg>
@@ -622,10 +642,10 @@ export function MainApp() {
 
                 <div className="flex-1" />
 
-                <div className="px-3 pt-2 border-t border-zinc-100">
+                <div className="px-3 pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
                   <button
                     onClick={() => setShowAiChat(true)}
-                    className="flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50 transition-all active:scale-[0.98]"
+                    className="flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-all active:scale-[0.98]"
                   >
                     <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
@@ -639,7 +659,7 @@ export function MainApp() {
                 <div className="px-3">
                   <button
                     onClick={() => setSidebarMode('options')}
-                    className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-xs font-medium text-zinc-500 hover:bg-zinc-100 transition-colors"
+                    className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
@@ -648,7 +668,7 @@ export function MainApp() {
                   </button>
                 </div>
                 <div className="px-3 pt-3 pb-1.5">
-                  <div className="text-[9px] font-semibold text-zinc-400 uppercase tracking-[0.12em]">Nodos</div>
+                  <div className="text-[9px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.12em]">Nodos</div>
                 </div>
                 <div className="px-3 space-y-1">
                   <NodeCard type="url" onAdd={addNodeToCanvas} />
@@ -790,13 +810,13 @@ export function MainApp() {
             {nodes.length === 0 && !selectedNode && (
               <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                 <div className="text-center max-w-xs pointer-events-auto">
-                  <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-emerald-400/10 to-emerald-500/5 border border-emerald-200/50 flex items-center justify-center">
+                  <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-emerald-400/10 to-emerald-500/5 border border-emerald-200/50 dark:border-emerald-800/30 flex items-center justify-center">
                     <svg className="w-7 h-7 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                     </svg>
                   </div>
-                  <h2 className="text-lg font-bold text-zinc-900 mb-2">Get Started</h2>
-                  <p className="text-sm text-zinc-500 mb-5 leading-relaxed">
+                  <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-2">Get Started</h2>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-5 leading-relaxed">
                     Arrastra nodos desde la barra lateral o haz clic en ellos para agregarlos al canvas.
                   </p>
                 </div>
