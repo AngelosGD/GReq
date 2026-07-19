@@ -71,6 +71,19 @@ export function MainApp() {
     document.documentElement.classList.toggle('dark', dark)
     localStorage.setItem('greq-theme', dark ? 'dark' : 'light')
   }, [dark])
+  useEffect(() => {
+    const nodeIds = new Set(nodes.map((n) => n.id))
+    setCollections((prev) => {
+      let changed = false
+      const next = prev.map((c) => {
+        const filtered = c.nodeIds.filter((id) => nodeIds.has(id))
+        if (filtered.length !== c.nodeIds.length) changed = true
+        return { ...c, nodeIds: filtered }
+      })
+      if (changed) saveCollections(next)
+      return changed ? next : prev
+    })
+  }, [nodes.length])
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
   const takeSnapshot = useFlowStore((s) => s.takeSnapshot)
@@ -259,14 +272,22 @@ export function MainApp() {
 
   const performDelete = useCallback((node: Node, deleteGroup = false) => {
     takeSnapshot(nodes, edges)
+    let removedIds: string[]
     if (deleteGroup) {
       const childIds = edges.filter((e) => e.source === node.id).map((e) => e.target)
-      setNodes((nds) => nds.filter((n) => n.id !== node.id && !childIds.includes(n.id)))
-      setEdges((eds) => eds.filter((e) => e.source !== node.id && e.target !== node.id && !childIds.includes(e.source)))
+      removedIds = [node.id, ...childIds]
+      setNodes((nds) => nds.filter((n) => !removedIds.includes(n.id)))
+      setEdges((eds) => eds.filter((e) => !removedIds.includes(e.source) && !removedIds.includes(e.target)))
     } else {
+      removedIds = [node.id]
       setNodes((nds) => nds.filter((n) => n.id !== node.id))
       setEdges((eds) => eds.filter((e) => e.source !== node.id && e.target !== node.id))
     }
+    setCollections((prev) => {
+      const next = prev.map((c) => ({ ...c, nodeIds: c.nodeIds.filter((id) => !removedIds.includes(id)) }))
+      saveCollections(next)
+      return next
+    })
     setSelectedNode(null)
     setCtxMenu(null)
   }, [nodes, edges, setNodes, setEdges, takeSnapshot])
