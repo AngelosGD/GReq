@@ -950,8 +950,21 @@ export function MainApp() {
             <ContextMenu
               x={ctxMenu.x}
               y={ctxMenu.y}
+              nodeId={ctxMenu.node.id}
+              collections={collections}
               onDuplicate={() => duplicateNode(ctxMenu.node)}
               onDelete={() => deleteNode(ctxMenu.node)}
+              onAddToCollection={(collectionId, nodeId) => {
+                setCollections((prev) => {
+                  const next = prev.map((c) =>
+                    c.id === collectionId && !c.nodeIds.includes(nodeId)
+                      ? { ...c, nodeIds: [...c.nodeIds, nodeId] }
+                      : c
+                  )
+                  saveCollections(next)
+                  return next
+                })
+              }}
               onClose={() => setCtxMenu(null)}
             />
           )}

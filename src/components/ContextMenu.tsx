@@ -1,10 +1,13 @@
 import { useEffect, useRef } from 'react'
 
-export function ContextMenu({ x, y, onDuplicate, onDelete, onClose }: {
+export function ContextMenu({ x, y, onDuplicate, onDelete, onClose, collections, onAddToCollection, nodeId }: {
   x: number; y: number
   onDuplicate: () => void
   onDelete: () => void
   onClose: () => void
+  collections?: { id: string; name: string; nodeIds: string[] }[]
+  onAddToCollection?: (collectionId: string, nodeId: string) => void
+  nodeId?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -33,6 +36,23 @@ export function ContextMenu({ x, y, onDuplicate, onDelete, onClose }: {
         </svg>
         Duplicar
       </button>
+      {collections && collections.length > 0 && (
+        <div className="border-t border-zinc-100 dark:border-zinc-800 pt-1 mt-1">
+          <div className="px-3.5 py-1 text-[9px] font-semibold text-zinc-400 uppercase tracking-wider">Agregar a colección</div>
+          {collections.map((col) => (
+            <button
+              key={col.id}
+              onClick={() => { onAddToCollection?.(col.id, nodeId!); onClose() }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-1.5 text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors duration-150"
+            >
+              <svg className="w-3 h-3 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+              </svg>
+              {col.name}
+            </button>
+          ))}
+        </div>
+      )}
       <button
         onClick={() => { onDelete(); onClose() }}
         className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors duration-150"
