@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Node } from '@xyflow/react'
+import { useExecStore } from '../store/execStore'
 
 function simpleDiff(a: string, b: string): { type: 'same' | 'added' | 'removed'; line: string }[] {
   const linesA = a.split('\n')
@@ -26,6 +27,8 @@ export function ResponseSection({ node, setNodeData }: { node: Node; setNodeData
   const [diffMode, setDiffMode] = useState(false)
   const [diffTargetA, setDiffTargetA] = useState(0)
   const [diffTargetB, setDiffTargetB] = useState(0)
+  const [showHistory, setShowHistory] = useState(false)
+  const history = useExecStore((s) => s.responseHistory[node.id])
   const d = (node.data as Record<string, unknown>) ?? {}
   const responsesList = d.responses as unknown[] | undefined
   const singleRes = d.response as unknown
@@ -38,12 +41,13 @@ export function ResponseSection({ node, setNodeData }: { node: Node; setNodeData
   }
 
   return (
+    <>
     <div className="space-y-3 border-t border-zinc-100 dark:border-zinc-800 pt-4">
       <div className="flex items-center justify-between">
         <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.1em]">
           {allRes.length > 1 ? `Respuestas (${allRes.length})` : 'Respuesta'}
         </label>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setPrettify(!prettify)}
             className="text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150"
@@ -56,6 +60,17 @@ export function ResponseSection({ node, setNodeData }: { node: Node; setNodeData
               className="text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150"
             >
               {diffMode ? 'Normal' : 'Diff'}
+            </button>
+          )}
+          {history && history.length > 1 && (
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors duration-150 flex items-center gap-1"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {history.length}
             </button>
           )}
           <button
@@ -149,5 +164,34 @@ export function ResponseSection({ node, setNodeData }: { node: Node; setNodeData
       )
       }
     </div>
+
+      {showHistory && history && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/15 dark:bg-black/40" onClick={() => setShowHistory(false)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl shadow-black/8 dark:shadow-black/40 w-[420px] max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
+              <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Historial de respuestas</h3>
+              <button onClick={() => setShowHistory(false)} className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+              {[...history].reverse().map((res, i) => {
+                const statusColor = res.status >= 200 && res.status < 300 ? 'text-emerald-600' : res.status >= 400 ? 'text-red-600' : 'text-amber-600'
+                return (
+                  <button key={i} onClick={() => { setNodeData(node.id, { response: res, responses: undefined }); setShowHistory(false) }}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors text-left"
+                  >
+                    <span className={`text-xs font-bold ${statusColor}`}>{res.status}</span>
+                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate flex-1">{res.statusText}</span>
+                    <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-mono">{res.durationMs}ms</span>
+                    <span className="text-[9px] text-zinc-400 dark:text-zinc-500">{history.length - i}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
