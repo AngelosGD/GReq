@@ -3,6 +3,7 @@ import {
   ReactFlowProvider,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   addEdge,
   type Node,
   type Edge,
@@ -75,6 +76,7 @@ export function MainApp() {
   const setUser = useAuthStore((s) => s.setUser)
   const takeSnapshot = useFlowStore((s) => s.takeSnapshot)
   const { undo, redo, canUndo, canRedo } = useUndoRedo()
+  const reactFlow = useReactFlow()
   const setNodeData = useCallback((id: string, data: Record<string, unknown>) => {
     const node = nodes.find((n) => n.id === id)
     if (node && ('title' in data || 'url' in data)) {
@@ -432,6 +434,14 @@ export function MainApp() {
     input.click()
   }, [setNodes, setEdges, takeSnapshot])
 
+  const focusNode = useCallback((nodeId: string) => {
+    const node = nodes.find((n) => n.id === nodeId)
+    if (node) {
+      reactFlow.setCenter(node.position.x + 150, node.position.y + 50, { zoom: 1.2, duration: 300 })
+      setSelectedNode(node)
+    }
+  }, [nodes, reactFlow])
+
   const autoLayout = useCallback(() => {
     takeSnapshot(nodes, edges)
     const urlNodes = nodes.filter((n) => n.type === 'url')
@@ -746,7 +756,7 @@ export function MainApp() {
                           {!col.collapsed && col.nodeIds.map((nodeId) => {
                             const node = nodes.find((n) => n.id === nodeId)
                             return node ? (
-                              <div key={nodeId} className="ml-5 pl-2 flex items-center gap-1.5 py-1 text-[10px] text-zinc-400 dark:text-zinc-500 truncate">
+                              <div key={nodeId} onClick={() => focusNode(nodeId)} className="ml-5 pl-2 flex items-center gap-1.5 py-1 text-[10px] text-zinc-400 dark:text-zinc-500 truncate cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">
                                 <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                 </svg>
