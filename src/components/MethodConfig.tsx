@@ -12,7 +12,7 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
   return (
     <div className="space-y-4">
       <div>
-        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Method</label>
+        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.1em] block mb-1.5">Method</label>
         <div className="flex gap-0.5">
           {['GET', 'POST', 'DELETE', 'UPDATE'].map((m) => {
             const active = method === m
@@ -35,7 +35,7 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Repetir</label>
+        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.1em] block mb-1.5">Repetir</label>
         <div className="flex items-center gap-2">
           <input
             type="number"
@@ -50,7 +50,7 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Headers</label>
+        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.1em] block mb-1.5">Headers</label>
         <KeyValueEditor
           pairs={(d.headers as { key: string; value: string }[]) ?? []}
           onChange={(headers) => setNodeData(node.id, { headers })}
@@ -58,7 +58,7 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Body</label>
+        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.1em] block mb-1.5">Body</label>
         <div className="flex gap-1 mb-2">
           {['json', 'text', 'form'].map((t) => (
             <button
@@ -89,14 +89,14 @@ export function MethodConfig({ node, setNodeData }: { node: Node; setNodeData: (
         )}
         {(d.bodyType ?? 'json') === 'form' && (
           <KeyValueEditor
-            pairs={d.body ? JSON.parse(d.body as string) : [{ key: '', value: '' }]}
+            pairs={d.body ? (() => { try { return JSON.parse(d.body as string) } catch { return [{ key: '', value: '' }] } })() : [{ key: '', value: '' }]}
             onChange={(pairs) => setNodeData(node.id, { body: JSON.stringify(pairs) })}
           />
         )}
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.1em] block mb-1.5">Auth</label>
+        <label className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.1em] block mb-1.5">Auth</label>
         <div className="flex gap-1">
           {['None', 'Basic', 'Bearer'].map((a) => (
             <button

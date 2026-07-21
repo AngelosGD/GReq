@@ -50,7 +50,7 @@ function methodFlag(m: string): string {
 }
 
 function quote(s: string): string {
-  const escaped = s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  const escaped = s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`')
   return `"${escaped}"`
 }
 

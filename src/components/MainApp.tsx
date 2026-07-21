@@ -9,23 +9,20 @@ import {
   type Connection,
   type NodeChange,
 } from '@xyflow/react'
-import { Logo } from './Logo'
 import { useAppStore } from '../store'
 import { useFlowStore } from '../store/flowStore'
 import { useUndoRedo } from '../hooks/useUndoRedo'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { invoke } from '@tauri-apps/api/core'
 import type { HttpMethod } from '../types'
 
 import { useExecStore, type StoredResponse } from '../store/execStore'
 import { resolveVariables } from '../utils/resolveVariables'
 import { getUrlData, getMethodData } from '../utils/nodeData'
-import { NodeSearch } from './NodeSearch'
 import { MockApi } from './MockApi'
 import { Canvas } from './Canvas'
-import { NodeCard } from './NodeCard'
 import { ContextMenu } from './ContextMenu'
 import { ConfigPanel } from './ConfigPanel'
-import { AuthGuard } from './AuthGuard'
 import { ProfileModal } from './ProfileModal'
 import { signOut } from '../lib/appwrite'
 import { useAuthStore } from '../store/authStore'
@@ -37,7 +34,10 @@ import { GitHubSection } from './GitHubSection'
 import { EnvPanel } from './EnvPanel'
 import { useEnvStore } from '../store/envStore'
 import { ExportCodePanel } from './ExportCodePanel'
-import { loadCollections, saveCollections, genCollectionId, type Collection } from '../lib/collections'
+import { loadCollections, saveCollections, type Collection } from '../lib/collections'
+import { TopBar } from './TopBar'
+import { Sidebar } from './Sidebar'
+import { ShortcutsModal } from './ShortcutsModal'
 
 type SidebarMode = 'options' | 'nodes'
 
@@ -392,45 +392,10 @@ export function MainApp() {
   }, [nodes, edges, user])
 
   /* Keyboard shortcuts */
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault()
-        const snap = undo()
-        if (snap) {
-          setNodes(snap.nodes)
-          setEdges(snap.edges)
-        }
-        return
-      }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'y') && e.shiftKey) {
-        e.preventDefault()
-        const snap = redo()
-        if (snap) {
-          setNodes(snap.nodes)
-          setEdges(snap.edges)
-        }
-        return
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'y' && !e.shiftKey) {
-        e.preventDefault()
-        const snap = redo()
-        if (snap) {
-          setNodes(snap.nodes)
-          setEdges(snap.edges)
-        }
-        return
-      }
-      const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName) || (e.target as HTMLElement)?.isContentEditable
-      if ((e.key === 'Delete' || e.key === 'Supr' || e.key === 'Backspace') && selectedNode && !isInput) {
-        if ((selectedNode.data as Record<string, unknown>)?.locked) return
-        e.preventDefault()
-        deleteNode(selectedNode)
-      }
-    }
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [undo, redo, setNodes, setEdges, selectedNode, nodes, edges, takeSnapshot, deleteNode])
+  useKeyboardShortcuts({
+    undo, redo, setNodes, setEdges,
+    selectedNode, deleteNode,
+  })
 
   /* Save flow */
   const saveFlow = useCallback(() => {
@@ -503,350 +468,57 @@ export function MainApp() {
     }))
   }, [nodes, edges, setNodes, takeSnapshot])
 
+  const onSignOut = useCallback(async () => {
+    await signOut()
+    setUser(null)
+    goToAuth()
+  }, [setUser, goToAuth])
+
   return (
     <ReactFlowProvider>
       <div className="h-[100dvh] flex flex-col bg-white dark:bg-zinc-950 transition-colors duration-200" style={{ fontFamily: "'Geist', system-ui, sans-serif" }}>
-        <header className="flex items-center justify-between px-5 py-3 border-b border-zinc-200/70 dark:border-zinc-800/60 flex-shrink-0 transition-colors duration-200">
-          <div className="flex items-center gap-3">
-            <Logo size={22} className="shrink-0" />
-            <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">GReq</span>
-            <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700" />
-            <button
-              onClick={undo}
-              disabled={!canUndo}
-              className="p-1.5 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-              title="Deshacer (Ctrl+Z)"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
-              </svg>
-            </button>
-            {canUndo && (
-              <span className="flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full bg-zinc-200 dark:bg-zinc-700 text-[8px] font-semibold text-zinc-500 dark:text-zinc-400 leading-none">
-                {useFlowStore.getState().past.length}
-              </span>
-            )}
-            <button
-              onClick={redo}
-              disabled={!canRedo}
-              className="p-1.5 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-              title="Rehacer (Ctrl+Shift+Z)"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 15l6-6m0 0l-6-6m6 6H9a6 6 0 000 12h3" />
-              </svg>
-            </button>
-            <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700" />
-            <button
-              onClick={saveFlow}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
-              title="Guardar flujo"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10.5v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Guardar
-            </button>
-            <button
-              onClick={loadFlow}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
-              title="Cargar flujo"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9.75v6m0 0l-3-3m3 3l3-3m-8.25 6a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
-              </svg>
-              Cargar
-            </button>
-            <button
-              onClick={autoLayout}
-              className="p-1.5 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
-              title="Auto-layout nodos"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-              </svg>
-            </button>
-          </div>
-          <AuthGuard label="Inicia sesión para buscar grupos guardados">
-            <NodeSearch nodes={nodes} edges={edges} />
-          </AuthGuard>
-          <div className="flex items-center gap-0.5">
-            <button
-              onClick={() => setShowShortcuts(true)}
-              className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
-              aria-label="Atajos de teclado"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
-              </svg>
-            </button>
-            <button
-              onClick={() => setDark((p) => !p)}
-              className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
-              aria-label="Alternar tema"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                {dark ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
-                )}
-              </svg>
-            </button>
-            <div className="relative group">
-            <button
-              onClick={goToSettings}
-              className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
-              aria-label="Configuración"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.431-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
-            {user && (
-              <div className="absolute right-0 top-full mt-1.5 w-44 bg-white dark:bg-zinc-900 rounded-xl shadow-tinted-lg border border-zinc-200/80 dark:border-zinc-700/80 z-30 py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-                <div className="px-3 py-2 text-[11px] text-zinc-500 dark:text-zinc-400 truncate border-b border-zinc-100 dark:border-zinc-700/50">
-                  {user.email}
-                </div>
-                <button
-                  onClick={() => setShowProfile(true)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
-                >
-                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                  </svg>
-                  Perfil
-                </button>
-                <button
-                  onClick={async () => {
-                    await signOut()
-                    setUser(null)
-                    goToAuth()
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-                  </svg>
-                  Cerrar sesión
-                </button>
-            </div>
-          )}
-          </div>
-          </div>
-        </header>
+        <TopBar
+          undo={undo}
+          redo={redo}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          saveFlow={saveFlow}
+          loadFlow={loadFlow}
+          autoLayout={autoLayout}
+          dark={dark}
+          setDark={setDark}
+          goToSettings={goToSettings}
+          user={user}
+          onSignOut={onSignOut}
+          setShowProfile={setShowProfile}
+          setShowShortcuts={setShowShortcuts}
+          nodes={nodes}
+          edges={edges}
+        />
 
         <div className="flex flex-1 overflow-hidden">
-          <aside className="w-52 flex-shrink-0 border-r border-zinc-200/60 dark:border-zinc-800/50 bg-white dark:bg-zinc-950 flex flex-col py-2 gap-0.5 transition-colors duration-200">
-            {sidebarMode === 'options' ? (
-              <>
-                <div className="px-3 pb-1.5">
-                  <div className="relative">
-                    <button
-                      onClick={() => { setSidebarMode('nodes'); setShowMockApi(false); setShowGithubSection(false); setShowEnvPanel(false); setShowExportCode(false); }}
-                      className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
-                        !showMockApi && !showGithubSection ? 'text-zinc-800 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
-                      }`}
-                    >
-                      {!showMockApi && !showGithubSection && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800 dark:bg-zinc-100" />}
-                      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-                      </svg>
-                      Hacer peticiones
-                    </button>
-                  </div>
-                </div>
-
-                <div className="px-3 pb-0.5">
-                  <AuthGuard label="Inicia sesión para ver el historial">
-                    <div className="relative">
-                      <button
-                        onClick={() => setShowHistory(true)}
-                        className="flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-all active:scale-[0.98]"
-                      >
-                        <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Historial
-                      </button>
-                    </div>
-                  </AuthGuard>
-                </div>
-
-                <div className="px-3 pb-0.5">
-                  <AuthGuard label="Inicia sesión para usar APIs mock">
-                    <div className="relative">
-                      <button
-                        onClick={() => { setShowMockApi(true); setShowGithubSection(false); setShowEnvPanel(false); setShowExportCode(false); setSelectedNode(null); setSidebarMode('options'); }}
-                        className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
-                          showMockApi ? 'text-zinc-800 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
-                        }`}
-                      >
-                        {showMockApi && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800 dark:bg-zinc-100" />}
-                        <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-                        </svg>
-                        Generar API
-                      </button>
-                    </div>
-                  </AuthGuard>
-                </div>
-
-                <div className="px-3 pb-0.5">
-                  <div className="relative">
-                    <button
-                      onClick={() => { setShowGithubSection(true); setShowMockApi(false); setShowEnvPanel(false); setShowExportCode(false); setSelectedNode(null); setSidebarMode('options'); }}
-                      className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
-                        showGithubSection ? 'text-zinc-800 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
-                      }`}
-                    >
-                      {showGithubSection && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800 dark:bg-zinc-100" />}
-                      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0022 12c0-5.523-4.477-10-10-10z" />
-                      </svg>
-                      Desde GitHub
-                    </button>
-                  </div>
-                </div>
-
-                <div className="px-3 pb-0.5">
-                  <div className="relative">
-                    <button
-                      onClick={() => { setShowEnvPanel(true); setShowMockApi(false); setShowGithubSection(false); setShowExportCode(false); setSelectedNode(null); setSidebarMode('options'); }}
-                      className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] relative ${
-                        showEnvPanel ? 'text-zinc-800 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
-                      }`}
-                    >
-                      {showEnvPanel && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800 dark:bg-zinc-100" />}
-                      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                      </svg>
-                      Entornos
-                    </button>
-                  </div>
-                </div>
-
-                <div className="px-3 pb-0.5">
-                  <button
-                    onClick={() => { setShowExportCode(true); setShowMockApi(false); setShowGithubSection(false); setShowEnvPanel(false); setSelectedNode(null); setSidebarMode('options'); }}
-                    className={`flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.98] ${
-                      showExportCode ? 'text-zinc-800 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
-                    }`}
-                  >
-                    {showExportCode && <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r-full bg-zinc-800 dark:bg-zinc-100" />}
-                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
-                    </svg>
-                      Exportar código
-                    </button>
-                  </div>
-
-                <div className="px-3 pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[9px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.12em]">Colecciones</span>
-                    <button onClick={() => {
-                      const name = prompt('Nombre de la colección:')
-                      if (name?.trim()) {
-                        const newCol: Collection = { id: genCollectionId(), name: name.trim(), nodeIds: [], collapsed: false }
-                        setCollections((prev) => { const next = [...prev, newCol]; saveCollections(next); return next })
-                      }
-                    }} className="w-5 h-5 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all">
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                    </button>
-                  </div>
-                  {collections.length === 0 ? (
-                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 py-2 text-center">Agrupa tus endpoints en colecciones</p>
-                  ) : (
-                    <div className="space-y-0.5 max-h-40 overflow-y-auto">
-                      {collections.map((col) => (
-                        <div key={col.id}>
-                          <button
-                            onClick={() => {
-                              setActiveCollection((prev) => prev === col.id ? null : col.id)
-                              setCollections((prev) => {
-                                const next = prev.map((c) => c.id === col.id ? { ...c, collapsed: !c.collapsed } : c)
-                                saveCollections(next)
-                                return next
-                              })
-                            }}
-                            className={`group flex items-center gap-1.5 w-full px-2 py-1.5 rounded-lg text-[11px] transition-all ${
-                              activeCollection === col.id
-                                ? 'text-zinc-800 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800'
-                                : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
-                            }`}
-                          >
-                            <svg className={`w-3 h-3 shrink-0 text-zinc-400 transition-transform ${col.collapsed ? '' : 'rotate-90'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                            </svg>
-                            <svg className="w-3.5 h-3.5 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
-                            </svg>
-                            <span className="truncate flex-1 text-left">{col.name}</span>
-                            <span className="text-[9px] text-zinc-400">{col.nodeIds.length}</span>
-                            <button onClick={(e) => { e.stopPropagation(); setCollections((prev) => { const next = prev.filter((c) => c.id !== col.id); saveCollections(next); if (activeCollection === col.id) setActiveCollection(null); return next }) }} className="w-4 h-4 flex items-center justify-center rounded text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 opacity-0 group-hover:opacity-100 transition-all shrink-0">
-                              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                          </button>
-                          {!col.collapsed && col.nodeIds.map((nodeId) => {
-                            const node = nodes.find((n) => n.id === nodeId)
-                            return node ? (
-                              <div key={nodeId} onClick={() => focusNode(nodeId)} className="ml-5 pl-2 flex items-center gap-1.5 py-1 text-[10px] text-zinc-400 dark:text-zinc-500 truncate cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">
-                                <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                </svg>
-                                <span className="truncate">{getUrlData(node).title || getUrlData(node).url || 'Sin título'}</span>
-                              </div>
-                            ) : null
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex-1" />
-
-                <div className="px-3 pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
-                  <button
-                    onClick={() => setShowAiChat(true)}
-                    className="flex items-center gap-2.5 w-full pl-3 pr-2 py-2 rounded-lg text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-all active:scale-[0.98]"
-                  >
-                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                    </svg>
-                    Asistente IA
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="px-3">
-                  <button
-                    onClick={() => setSidebarMode('options')}
-                    className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-                    </svg>
-                    Volver
-                  </button>
-                </div>
-                <div className="px-3 pt-3 pb-1.5">
-                  <div className="text-[9px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.12em]">Nodos</div>
-                </div>
-                <div className="px-3 space-y-1">
-                  <NodeCard type="url" onAdd={addNodeToCanvas} />
-                  <NodeCard type="get" onAdd={addNodeToCanvas} />
-                  <NodeCard type="post" onAdd={addNodeToCanvas} />
-                  <NodeCard type="put" onAdd={addNodeToCanvas} />
-                  <NodeCard type="patch" onAdd={addNodeToCanvas} />
-                  <NodeCard type="delete" onAdd={addNodeToCanvas} />
-                  <NodeCard type="update" onAdd={addNodeToCanvas} />
-                </div>
-              </>
-            )}
-          </aside>
+          <Sidebar
+            sidebarMode={sidebarMode}
+            setSidebarMode={setSidebarMode}
+            showMockApi={showMockApi}
+            showGithubSection={showGithubSection}
+            showEnvPanel={showEnvPanel}
+            showExportCode={showExportCode}
+            setShowHistory={setShowHistory}
+            setShowMockApi={setShowMockApi}
+            setShowGithubSection={setShowGithubSection}
+            setShowEnvPanel={setShowEnvPanel}
+            setShowExportCode={setShowExportCode}
+            setShowAiChat={setShowAiChat}
+            addNodeToCanvas={addNodeToCanvas}
+            collections={collections}
+            setCollections={setCollections}
+            activeCollection={activeCollection}
+            setActiveCollection={setActiveCollection}
+            focusNode={focusNode}
+            nodes={nodes}
+            setSelectedNode={setSelectedNode}
+          />
 
           <main
             className="flex-1 relative"
@@ -866,8 +538,6 @@ export function MainApp() {
                 />
               </div>
             )}
-
-
 
             {showEnvPanel && (
               <div className="absolute right-0 top-0 bottom-0 z-20 w-80">
@@ -960,36 +630,36 @@ export function MainApp() {
               />
             ) : (
               <>
-            <Canvas
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={wrappedOnNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              addNodeToCanvas={addNodeToCanvas}
-              onNodeSelect={setSelectedNode}
-              onNodeContext={(_e: React.MouseEvent, node: Node) => {
-                setSelectedNode(node)
-                setCtxMenu({ x: _e.clientX, y: _e.clientY, node })
-              }}
-              focusNodeRef={focusNodeRef}
-            />
+                <Canvas
+                  nodes={nodes}
+                  edges={edges}
+                  onNodesChange={wrappedOnNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  onConnect={onConnect}
+                  addNodeToCanvas={addNodeToCanvas}
+                  onNodeSelect={setSelectedNode}
+                  onNodeContext={(_e: React.MouseEvent, node: Node) => {
+                    setSelectedNode(node)
+                    setCtxMenu({ x: _e.clientX, y: _e.clientY, node })
+                  }}
+                  focusNodeRef={focusNodeRef}
+                />
 
-            {nodes.length === 0 && !selectedNode && (
-              <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                <div className="text-center max-w-xs pointer-events-auto">
-                  <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-emerald-400/10 to-emerald-500/5 border border-emerald-200/50 dark:border-emerald-800/30 flex items-center justify-center">
-                    <svg className="w-7 h-7 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
+                {nodes.length === 0 && !selectedNode && (
+                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                    <div className="text-center max-w-xs pointer-events-auto">
+                      <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-emerald-400/10 to-emerald-500/5 border border-emerald-200/50 dark:border-emerald-800/30 flex items-center justify-center">
+                        <svg className="w-7 h-7 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                      </div>
+                      <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-2">Get Started</h2>
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-5 leading-relaxed">
+                        Arrastra nodos desde la barra lateral o haz clic en ellos para agregarlos al canvas.
+                      </p>
+                    </div>
                   </div>
-                  <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-2">Get Started</h2>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-5 leading-relaxed">
-                    Arrastra nodos desde la barra lateral o haz clic en ellos para agregarlos al canvas.
-                  </p>
-                </div>
-              </div>
-            )}
+                )}
               </>
             )}
           </main>
@@ -1058,24 +728,7 @@ export function MainApp() {
 
       {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
 
-      {showShortcuts && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/15 dark:bg-black/40" onClick={() => setShowShortcuts(false)}>
-          <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl shadow-black/8 dark:shadow-black/40 w-80 p-5" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 mb-4">Atajos de teclado</h3>
-            <div className="space-y-2.5 text-xs">
-              <div className="flex justify-between"><span className="text-zinc-500 dark:text-zinc-400">Deshacer</span><kbd className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-mono">Ctrl+Z</kbd></div>
-              <div className="flex justify-between"><span className="text-zinc-500 dark:text-zinc-400">Rehacer</span><kbd className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-mono">Ctrl+Shift+Z</kbd></div>
-              <div className="flex justify-between"><span className="text-zinc-500 dark:text-zinc-400">Rehacer</span><kbd className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-mono">Ctrl+Y</kbd></div>
-              <div className="flex justify-between"><span className="text-zinc-500 dark:text-zinc-400">Eliminar nodo</span><kbd className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-mono">Supr</kbd></div>
-            </div>
-            <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
-              <button onClick={() => setShowShortcuts(false)} className="w-full py-2 rounded-lg text-xs font-semibold bg-zinc-900 dark:bg-zinc-700 text-white hover:bg-zinc-800 dark:hover:bg-zinc-600 transition-all">Cerrar</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
     </ReactFlowProvider>
   )
 }
-
-

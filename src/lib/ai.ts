@@ -169,7 +169,7 @@ async function callExternalAPI(prompt: string): Promise<string> {
   const { provider, apiKey } = useAIStore.getState()
 
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 15000)
+  const timeout = setTimeout(() => controller.abort(), 30000)
   const signal = controller.signal
 
   try {

@@ -155,15 +155,11 @@ pub async fn start_oauth_webview(
 }
 
 fn random_state(len: usize) -> String {
+    use rand::RngCore;
     let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".chars().collect();
-    let seed = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    (0..len).map(|i| {
-        let idx = seed.wrapping_mul((i + 1) as u128) as usize % chars.len();
-        chars[idx]
-    }).collect()
+    let mut buf = vec![0u8; len];
+    rand::rngs::OsRng.fill_bytes(&mut buf);
+    buf.iter().map(|b| chars[*b as usize % chars.len()]).collect()
 }
 
 #[tauri::command]

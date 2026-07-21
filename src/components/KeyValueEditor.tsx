@@ -1,9 +1,17 @@
+import { useRef } from 'react'
+
+let _idCounter = 0
+
 export function KeyValueEditor({ pairs, onChange, keyLabel, valueLabel }: {
   pairs: { key: string; value: string }[]
   onChange: (pairs: { key: string; value: string }[]) => void
   keyLabel?: string
   valueLabel?: string
 }) {
+  const idsRef = useRef<number[]>([])
+  while (idsRef.current.length < pairs.length) idsRef.current.push(++_idCounter)
+  if (idsRef.current.length > pairs.length) idsRef.current.length = pairs.length
+
   const add = () => onChange([...pairs, { key: '', value: '' }])
   const remove = (i: number) => onChange(pairs.filter((_, idx) => idx !== i))
   const update = (i: number, field: 'key' | 'value', val: string) => {
@@ -13,7 +21,7 @@ export function KeyValueEditor({ pairs, onChange, keyLabel, valueLabel }: {
   return (
     <div className="space-y-1.5">
       {pairs.map((p, i) => (
-        <div key={i} className="flex gap-1.5 items-center">
+        <div key={idsRef.current[i]} className="flex gap-1.5 items-center">
           <input
             value={p.key} onChange={(e) => update(i, 'key', e.target.value)}
             placeholder={keyLabel ?? 'Key'}
