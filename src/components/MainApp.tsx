@@ -59,9 +59,12 @@ export function MainApp() {
       const lockedIds = new Set(
         nodes.filter((n) => (n.data as Record<string, unknown>)?.locked).map((n) => n.id)
       )
-      const filtered = changes.filter(
-        (c) => c.type !== 'position' && c.type !== 'dimensions' || !('id' in c) || !lockedIds.has(c.id)
-      )
+      const filtered = changes.filter((c) => {
+        if ('id' in c && lockedIds.has(c.id)) {
+          return c.type !== 'position' && c.type !== 'dimensions' && c.type !== 'remove'
+        }
+        return true
+      })
       onNodesChange(filtered)
     },
     [nodes, onNodesChange],
@@ -306,6 +309,7 @@ export function MainApp() {
   }, [nodes, edges, setNodes, setEdges, takeSnapshot])
 
   const deleteNode = useCallback((node: Node) => {
+    if ((node.data as Record<string, unknown>)?.locked) return
     const title = getUrlData(node).title
     if (node.type === 'url' && title) {
       const methods = edges
