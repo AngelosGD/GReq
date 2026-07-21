@@ -12,16 +12,18 @@ export function ContextMenu({ x, y, onDuplicate, onDelete, onClose, collections,
   onToggleLock?: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as HTMLElement)) {
-        onClose()
+        onCloseRef.current()
       }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
-  }, [onClose])
+  }, [])
 
   return (
     <div

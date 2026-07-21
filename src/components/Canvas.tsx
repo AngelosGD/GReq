@@ -30,6 +30,10 @@ export function Canvas({
   const { screenToFlowPosition, setCenter } = useReactFlow()
   const addRef = useRef(addNodeToCanvas)
   addRef.current = addNodeToCanvas
+  const onNodeSelectRef = useRef(onNodeSelect)
+  onNodeSelectRef.current = onNodeSelect
+  const onNodeContextRef = useRef(onNodeContext)
+  onNodeContextRef.current = onNodeContext
 
   useEffect(() => {
     if (focusNodeRef) {
@@ -37,11 +41,11 @@ export function Canvas({
         const node = nodes.find((n) => n.id === nodeId)
         if (node) {
           setCenter(node.position.x + 150, node.position.y + 50, { zoom: 1.2, duration: 300 })
-          onNodeSelect(node)
+          onNodeSelectRef.current(node)
         }
       }
     }
-  }, [nodes, setCenter, onNodeSelect, focusNodeRef])
+  }, [nodes, setCenter, focusNodeRef])
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
@@ -65,14 +69,14 @@ export function Canvas({
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       if ((node.data as Record<string, unknown>)?.locked) return
-      onNodeSelect(node)
+      onNodeSelectRef.current(node)
     },
-    [onNodeSelect],
+    [],
   )
 
   const onPaneClick = useCallback(() => {
-    onNodeSelect(null)
-  }, [onNodeSelect])
+    onNodeSelectRef.current(null)
+  }, [])
 
   const handleContextMenu = useCallback(
     (event: React.MouseEvent, node: Node) => {

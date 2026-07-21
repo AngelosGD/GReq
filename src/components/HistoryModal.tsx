@@ -58,8 +58,9 @@ export function HistoryModal({ onClose, onRetomar }: { onClose: () => void; onRe
                 </div>
                 <div className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 truncate mb-1.5">{entry.url || 'Sin URL'}</div>
                 <div className="flex items-center gap-1">
-                  {entry.nodes.filter((n: any) => n.type === 'method').map((n: any) => {
-                    const p = palettes[methodLabels[n.data?.method] as keyof typeof palettes]
+                  {entry.nodes.filter((n) => n.type === 'method').map((n) => {
+                    const method = (n.data as Record<string, unknown>)?.method as string | undefined
+                    const p = method ? palettes[methodLabels[method] as keyof typeof palettes] : undefined
                     return <div key={n.id} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: p?.dot ?? '#a1a1aa' }} />
                   })}
                   <span className="text-[9px] text-zinc-400 dark:text-zinc-500 ml-1">{entry.methodCount} petición{entry.methodCount !== 1 ? 'es' : ''}</span>

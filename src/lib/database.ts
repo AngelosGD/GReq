@@ -1,3 +1,4 @@
+import type { Node, Edge } from '@xyflow/react'
 import { Databases, ID, Query, Permission, Role } from 'appwrite'
 import { client } from './appwrite'
 
@@ -15,8 +16,8 @@ export interface HistoryEntry {
   url: string
   timestamp: number
   methodCount: number
-  nodes: any[]
-  edges: any[]
+  nodes: Node[]
+  edges: Edge[]
 }
 
 export async function getHistory(userId: string): Promise<HistoryEntry[]> {

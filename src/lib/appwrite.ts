@@ -16,8 +16,9 @@ export async function signInWithEmail(email: string, password: string) {
 export async function signUpWithEmail(name: string, email: string, password: string) {
   try {
     await account.create(ID.unique(), email, password, name)
-  } catch (e: any) {
-    if (e?.code === 409 || e?.type === 'user_already_exists' || e?.code === 400) {
+  } catch (e: unknown) {
+    const err = e as { code?: number; type?: string }
+    if (err?.code === 409 || err?.type === 'user_already_exists' || err?.code === 400) {
       throw new Error('Este correo ya está registrado con otra contraseña. Iniciá sesión con tu correo y contraseña.')
     }
     throw e
