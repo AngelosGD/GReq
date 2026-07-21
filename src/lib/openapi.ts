@@ -52,7 +52,7 @@ function parseYamlValue(val: string): any {
   return val
 }
 
-function simpleYamlParse(text: string): any {
+export function simpleYamlParse(text: string): any {
   const BLOCK_MARKER: any = {}
   const result: any = {}
   const stack: { obj: any; indent: number; parent?: any; key?: string }[] = [

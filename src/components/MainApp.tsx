@@ -891,16 +891,18 @@ export function MainApp() {
                 onImport={(endpoints) => {
                   const newNodes = endpoints.flatMap((ep, i) => {
                     const baseX = i * 400
+                    const fullUrl = `${ep.baseUrl || 'https://api.example.com'}${ep.path}`
+                    const kv = (h: { name: string; value: string }[]) => h.map(x => ({ key: x.name, value: x.value }))
                     return [
                       {
                         id: `gh-url-${i}`,
                         type: 'url',
                         position: { x: baseX, y: 0 },
                         data: {
-                          url: `https://api.example.com${ep.path}`,
+                          url: fullUrl,
                           title: ep.summary || ep.path,
-                          params: [],
-                          headers: [],
+                          params: kv(ep.params?.filter(p => p.in === 'query').map(p => ({ name: p.name, value: '' })) || []),
+                          headers: kv(ep.headers || []),
                         },
                       } as Node,
                       {
@@ -909,9 +911,9 @@ export function MainApp() {
                         position: { x: baseX + 300, y: 0 },
                         data: {
                           method: ep.method,
-                          headers: [],
-                          body: '',
-                          bodyType: 'json',
+                          headers: kv(ep.headers || []),
+                          body: ep.body || '',
+                          bodyType: ep.contentType === 'application/json' ? 'json' : 'text',
                           auth: 'none',
                           authValue: '',
                           repeatCount: 1,
