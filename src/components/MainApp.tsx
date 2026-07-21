@@ -13,7 +13,7 @@ import { useAppStore } from '../store'
 import { useFlowStore } from '../store/flowStore'
 import { useUndoRedo } from '../hooks/useUndoRedo'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
-import { invoke } from '@tauri-apps/api/core'
+import { invokeWithTimeout } from '../lib/tauri'
 import type { HttpMethod } from '../types'
 
 import { useExecStore, type StoredResponse } from '../store/execStore'
@@ -206,7 +206,7 @@ export function MainApp() {
       const allResponsesArr: StoredResponse[] = []
 
       for (let i = 0; i < repeatCount; i++) {
-        const response = await invoke<StoredResponse>('make_request', {
+        const response = await invokeWithTimeout<StoredResponse>('make_request', {
           input: {
             url,
             method: methodData.method ?? 'GET',
@@ -216,7 +216,7 @@ export function MainApp() {
             authType: methodData.auth ?? 'None',
             authValue: resolvedAuthValue,
           },
-        })
+        }, 35000)
         allResponsesArr.push(response)
       }
 
@@ -470,6 +470,7 @@ export function MainApp() {
 
   const onSignOut = useCallback(async () => {
     await signOut()
+    localStorage.removeItem('greq-github-token')
     setUser(null)
     goToAuth()
   }, [setUser, goToAuth])

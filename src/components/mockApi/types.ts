@@ -1,6 +1,6 @@
 import type { KeyValuePair } from '../../types'
 
-export type FilterMethod = 'Todas' | 'GET' | 'POST' | 'DELETE' | 'UPDATE'
+export type FilterMethod = 'Todas' | 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'UPDATE'
 
 export interface Tab {
   id: string
@@ -32,13 +32,15 @@ export interface MockApiItem {
   sampleData: Record<string, string>[]
 }
 
-export const methods = ['GET', 'POST', 'DELETE', 'UPDATE'] as const
+export const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'UPDATE'] as const
 export const STORAGE_KEY = 'greq-mock-apis'
 export const FIELD_TYPES = ['string', 'int', 'bool', 'float'] as const
 
 export const methodColors: Record<string, { dot: string; badge: string; text: string }> = {
   GET:    { dot: '#10b981', badge: '#d1fae5', text: '#059669' },
   POST:   { dot: '#3b82f6', badge: '#dbeafe', text: '#2563eb' },
+  PUT:    { dot: '#f97316', badge: '#ffedd5', text: '#c2410c' },
+  PATCH:  { dot: '#8b5cf6', badge: '#f5f3ff', text: '#6d28d9' },
   DELETE: { dot: '#ef4444', badge: '#fee2e2', text: '#dc2626' },
   UPDATE: { dot: '#f59e0b', badge: '#fef3c7', text: '#d97706' },
 }

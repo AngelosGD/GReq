@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { invoke } from '@tauri-apps/api/core'
+import { invokeWithTimeout } from '../lib/tauri'
 import { importFromGithub, invalidateGithubCache, type GitHubEndpoint } from '../lib/github'
 
 interface RepoInfo {
@@ -257,7 +257,7 @@ export function GitHubSection({ onClose, onImport }: Props) {
     setFetchingRepos(true)
     setConnectError('')
     try {
-      const result = await invoke<{ email: string; name: string; accessToken: string }>('login_with_github', {
+      const result = await invokeWithTimeout<{ email: string; name: string; accessToken: string }>('login_with_github', {
         clientId: import.meta.env.VITE_GITHUB_CLIENT_ID,
         clientSecret: import.meta.env.VITE_GITHUB_CLIENT_SECRET,
       })
@@ -265,8 +265,8 @@ export function GitHubSection({ onClose, onImport }: Props) {
       const repos = await fetchMyRepos(result.accessToken)
       setGithubRepos(repos)
       setSelectedGithubRepos(new Set(repos.map((r) => r.fullName)))
-    } catch (e: any) {
-      setConnectError(e?.message || 'Error al vincular GitHub')
+    } catch (e: unknown) {
+      setConnectError((e as { message?: string })?.message || 'Error al vincular GitHub')
     }
     setFetchingRepos(false)
     setLinking(false)

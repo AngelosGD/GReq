@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
+import { invokeWithTimeout } from '../lib/tauri'
 import { Logo } from './Logo'
 import {
   signInWithEmail,
@@ -64,8 +64,9 @@ export function AuthPage({ onSuccess }: Props) {
         await signUpWithEmail(name, email, password)
       }
       await onLoginSuccess()
-    } catch (err: any) {
-      setError(err?.message || err?.type || err?.response?.message || 'Error al iniciar sesión')
+    } catch (err: unknown) {
+      const e = err as { message?: string; type?: string; response?: { message?: string } }
+      setError(e?.message || e?.type || e?.response?.message || 'Error al iniciar sesión')
     } finally {
       setLoading(false)
     }
@@ -84,7 +85,10 @@ export function AuthPage({ onSuccess }: Props) {
     try {
       await account.createEmailPasswordSession(safeEmail, pwd)
       return
-    } catch {}
+    } catch (e) {
+      const err = e as { type?: string }
+      if (err.type !== 'user_not_found') throw e
+    }
     await signUpWithEmail(safeName, safeEmail, pwd)
   }
 
@@ -93,27 +97,27 @@ export function AuthPage({ onSuccess }: Props) {
     setLoading(true)
     try {
       if (provider === OAuthProvider.Github) {
-        const oauthResult = await invoke<{ email: string; name: string; accessToken: string }>('login_with_github', {
+        const oauthResult = await invokeWithTimeout<{ email: string; name: string; accessToken: string }>('login_with_github', {
           clientId: import.meta.env.VITE_GITHUB_CLIENT_ID,
           clientSecret: import.meta.env.VITE_GITHUB_CLIENT_SECRET,
         })
         localStorage.setItem('greq-github-token', oauthResult.accessToken)
         await createOrLoginWithOAuth(oauthResult.email, oauthResult.name)
       } else if (provider === OAuthProvider.Google) {
-        const oauthResult = await invoke<{ email: string; name: string }>('login_with_google', {
+        const oauthResult = await invokeWithTimeout<{ email: string; name: string }>('login_with_google', {
           clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID,
           clientSecret: import.meta.env.VITE_GOOGLE_CLIENT_SECRET,
         })
         await createOrLoginWithOAuth(oauthResult.email, oauthResult.name)
       } else {
         const url = await getOAuthUrl(provider, 0)
-        const { userId, secret } = await invoke<{ userId: string; secret: string }>('start_oauth_webview', { url })
+        const { userId, secret } = await invokeWithTimeout<{ userId: string; secret: string }>('start_oauth_webview', { url })
         await completeOAuth(userId, secret)
       }
       await onLoginSuccess()
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[greq] OAuth error:', err)
-      const msg = typeof err === 'string' ? err : (err?.message || err?.type || 'Error al iniciar sesión con el proveedor')
+      const msg = typeof err === 'string' ? err : ((err as { message?: string; type?: string })?.message || (err as { type?: string })?.type || 'Error al iniciar sesión con el proveedor')
       setError(msg)
     } finally {
       setLoading(false)

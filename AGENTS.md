@@ -14,7 +14,7 @@ No lint/test/format/codegen. No test files/scripts/fixtures. `noUnusedLocals` + 
 - **Backend** (`src-tauri/`): Rust crate `api-flow`, lib `api_flow_lib`. Tauri v2 + axum 0.7 (mock/OAuth) + reqwest 0.12 (rustls-tls).
 - **State** (6 Zustand stores): `appStore`, `authStore`, `flowStore` (undo/redo, 50 snapshots max), `execStore` (loading/responses/responseHistory — 20 max per node), `aiStore`, `envStore` (profiles dev/staging/prod defaults, persisted `localStorage('greq-env-*')`). Re-exported: `useAppStore` from `store/index.ts`.
 - **Flow**: `@xyflow/react` v12 — 2 node types (`url`, `method`), 1 edge type (`animated`). Registration: `src/components/nodes/index.ts`, `src/components/edges/index.ts`. `ReactFlowProvider` inside `MainApp.tsx`. Keyboard: Ctrl+Z undo, Ctrl+Shift+Z/Y redo, Delete/Backspace remove selected.
-- **Auth**: Appwrite v26. Endpoint `https://nyc.cloud.appwrite.io/v1`, project `6a498aae000bdc5c653d`, DB `greq_db` (collections `historial` 20 entries, `mock_apis` 20 max). Guest fallback: `localStorage('greq-history')`, `localStorage('greq-mock-apis')`.
+- **Auth**: Appwrite v26. Endpoint/project hardcoded in `src/lib/appwrite.ts:3-4`. DB `greq_db` (collections `historial` 20 entries, `mock_apis` 20 max). Guest fallback: `localStorage('greq-history')`, `localStorage('greq-mock-apis')`.
 - **`.env.local`** (not committed): `VITE_GITHUB_CLIENT_ID`, `VITE_GITHUB_CLIENT_SECRET`, `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_CLIENT_SECRET`.
 
 ## IPC (9 commands in `src-tauri/src/lib.rs:170-180`)
@@ -23,7 +23,7 @@ All Rust structs `#[serde(rename_all = "camelCase")]`.
 - `make_request` — auto-prepend `http://` if no scheme, 30s timeout, maps UPDATE→PUT
 - `start_mock_server` / `stop_mock_server` / `stop_all_mock_servers` — axum mock on `127.0.0.1:{port}` (random if 0). MockConfig: `{ path, methods, status, headers, body, port, delayMs, methodConfigs, fields, sampleData, rateLimit (0=off), env_vars }`. Smart per-method: GET returns array/list or single (/:id), POST merges body+fields → 201+gen ID, DELETE → `{deleted:true,id}`, UPDATE/PUT/PATCH → `{updated:true,id,data}`. Fields typed: `string`/`int`/`bool`. Pagination via `?page=N&limit=M` + `X-Total-Count`/`Link`. Rate limiting: 429 + `Retry-After`. Env vars: `{{env.VAR_NAME}}` resolved from `env_vars`.
 - `start_oauth_server` / `wait_oauth_callback` / `start_oauth_webview` — ephemeral axum callback + Tauri WebviewWindow for Appwrite OAuth, intercepts `cloud.appwrite.io/console/auth/oauth2/success`
-- `login_with_github` / `login_with_google` — backend OAuth (ephemeral axum → browser → callback → code exchange → user fetch). Frontend creates Appwrite user with deterministic password: `greq_oauth_` + sanitized email `(replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0,10))` + `'A1'` (`AuthPage.tsx:74-78`).
+- `login_with_github` / `login_with_google` — backend OAuth (ephemeral axum → browser → callback → code exchange → user fetch). Frontend creates Appwrite user with deterministic password: `greq_oauth_` + sanitized email `(replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0,10))` + `'A1'` (`AuthPage.tsx:75-79`).
 - Dynamic templates (`mock.rs` `resolve_dynamic`): `{{$uuid}}`, `{{$timestamp}}`, `{{$randomInt}}`, `{{$randomBoolean}}`, `{{$randomName}}`, `{{$randomEmail}}`, `{{$randomWord}}`, `{{$randomNumber(min,max)}}`.
 
 ## Variable Syntax (`src/utils/resolveVariables.ts`)
@@ -50,8 +50,9 @@ All Rust structs `#[serde(rename_all = "camelCase")]`.
 
 ## Limitations
 - OpenAPI YAML parser indent-based — no multi-line strings, arrays, `$ref`, anchors (`src/lib/openapi.ts`)
+- Mock UI exposes only `['GET', 'POST', 'DELETE', 'UPDATE']` (`src/components/mockApi/types.ts:35`); PUT/PATCH usable in flow but not mock UI
 - No per-route method config on import — all methods share one responseBody
 - Mock server lacks conditional responses, WebSocket, SSE
 - cURL/HAR/Postman/Insomnia import unsupported
-- `__history` endpoint exists (`GET /__history`) but no frontend UI button
+- `__history` endpoint (`GET /__history`) shows past requests; button in editor toolbar when server running (MockApiEditor.tsx:167-172)
 - No response validation or schema generation

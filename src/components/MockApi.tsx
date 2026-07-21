@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { invoke } from '@tauri-apps/api/core'
+import { invokeWithTimeout } from '../lib/tauri'
 import { useAuthStore } from '../store/authStore'
 import { useEnvStore } from '../store/envStore'
 import { getMockApis, saveMockApi, deleteMockApi } from '../lib/database'
@@ -9,12 +9,6 @@ import { MockApiSidebar } from './mockApi/MockApiSidebar'
 import { MockApiEditor } from './mockApi/MockApiEditor'
 import { MockApiCreateModal } from './mockApi/MockApiCreateModal'
 import { MockApiItem, methods, STORAGE_KEY, methodColors, randomPort, defaultBody, genId, type FilterMethod, type Tab, type FieldDef } from './mockApi/types'
-
-const invokeWithTimeout = <T,>(cmd: string, args: Record<string, unknown>, ms = 4000): Promise<T> =>
-  Promise.race([
-    invoke<T>(cmd, args),
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Tiempo de espera agotado — el backend Tauri no responde')), ms)),
-  ])
 
 interface Props {
   onClose: () => void
@@ -57,7 +51,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
   const [restoreList, setRestoreList] = useState<{ apiId: string; name: string; port: number }[]>([])
   const [deleteTarget, setDeleteTarget] = useState<MockApiItem | null>(null)
   const [duplicateTarget, setDuplicateTarget] = useState<MockApiItem | null>(null)
-  const [inspectLog, setInspectLog] = useState<{ method: string; path: string; body: string } | null>(null)
+  const [inspectLog, setInspectLog] = useState<{ method: string; path: string; body: string; source: 'inspect' | 'history' } | null>(null)
   const [inspectLoading, setInspectLoading] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState('')
@@ -96,8 +90,14 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
   useEffect(() => {
     const saved = getActiveServers()
     if (saved.length > 0) {
+      clearTrackedServers()
       const existing = mockApis.filter((a) => saved.some((s) => s.apiId === a.id))
-      setRestoreList(existing.map((a) => ({ apiId: a.id, name: a.name, port: a.port })))
+      const list = existing.map((a) => ({ apiId: a.id, name: a.name, port: a.port }))
+      setRestoreList(list)
+      for (const item of list) {
+        const api = mockApis.find((a) => a.id === item.apiId)
+        if (api) startApi(api)
+      }
     }
   }, [])
 
@@ -147,18 +147,9 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
 
   const stopApi = async (api: MockApiItem) => {
     if (!api.serverId) return
-    try { await invoke('stop_mock_server', { id: api.serverId }) } catch {}
+    try { await invokeWithTimeout('stop_mock_server', { id: api.serverId }) } catch {}
     untrackServer(api.serverId)
     setMockApis((a) => a.map((x) => x.id === api.id ? { ...x, running: false, serverId: null } : x))
-  }
-
-  const restoreServers = () => {
-    clearTrackedServers()
-    for (const item of restoreList) {
-      const api = mockApis.find((a) => a.id === item.apiId)
-      if (api) startApi(api)
-    }
-    setRestoreList([])
   }
 
   const createApi = (name: string, formMethods: string[], formPath: string, formPort: string, formTempFields: FieldDef[], formSampleData: Record<string, string>[]) => {
@@ -197,7 +188,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
   }
 
   const doDelete = async (api: MockApiItem) => {
-    if (api.running && api.serverId) { try { await invoke('stop_mock_server', { id: api.serverId }) } catch {} }
+    if (api.running && api.serverId) { try { await invokeWithTimeout('stop_mock_server', { id: api.serverId }) } catch {} }
     setMockApis((a) => a.filter((x) => x.id !== api.id))
     setTabs((t) => t.map((tab) => (tab.apiId === api.id ? { ...tab, apiId: null } : tab)))
     if (user) deleteMockApi(user.$id, api.id).catch((err) => console.error('[greq] delete mock api:', err))
@@ -214,7 +205,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
     setInspectLoading(true)
     try {
       const res = await fetch(`http://localhost:${api.port}/__inspect`)
-      if (res.ok) { const data = await res.json(); setInspectLog(data) }
+      if (res.ok) { const data = await res.json(); setInspectLog({ ...data, source: 'inspect' }) }
       else { setInspectLog(null); alert('No hay peticiones registradas aún') }
     } catch { alert('Error al consultar el inspector') }
     finally { setInspectLoading(false) }
@@ -225,7 +216,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
       const res = await fetch(`http://localhost:${api.port}/__history`)
       if (res.ok) {
         const data = await res.json()
-        setInspectLog({ method: 'GET', path: '__history', body: JSON.stringify(data, null, 2) })
+        setInspectLog({ method: 'GET', path: '__history', body: JSON.stringify(data, null, 2), source: 'history' })
       } else { alert('No hay historial disponible') }
     } catch { alert('Error al consultar el historial') }
   }
@@ -329,12 +320,9 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
         )}
 
         {restoreList.length > 0 && (
-          <div className="flex items-center justify-between px-6 py-3 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800">
-            <p className="text-xs text-amber-800 dark:text-amber-400">{restoreList.length} servidor(es) estaban activos antes de cerrar la app.</p>
-            <div className="flex gap-2">
-              <button onClick={restoreServers} className="text-xs px-3 py-1 rounded-md bg-amber-600 text-white font-medium hover:bg-amber-700 transition-colors">Restaurar</button>
-              <button onClick={() => setRestoreList([])} className="text-xs px-3 py-1 rounded-md bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-950 transition-colors">Ignorar</button>
-            </div>
+          <div className="flex items-center justify-between px-6 py-3 bg-emerald-50 dark:bg-emerald-950/30 border-b border-emerald-200 dark:border-emerald-800">
+            <p className="text-xs text-emerald-700 dark:text-emerald-400">{restoreList.length} servidor(es) restaurados automáticamente.</p>
+            <button onClick={() => setRestoreList([])} className="text-xs px-3 py-1 rounded-md bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-950 transition-colors">OK</button>
           </div>
         )}
 
@@ -421,7 +409,7 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/15 dark:bg-black/40" onClick={() => setInspectLog(null)}>
           <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl shadow-black/8 dark:shadow-black/30 w-[480px] max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-100 dark:border-zinc-800">
-              <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Última petición</h3>
+              <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{inspectLog.source === 'history' ? 'Historial de peticiones' : 'Última petición'}</h3>
               <button onClick={() => setInspectLog(null)} className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800">
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>

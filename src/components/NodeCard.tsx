@@ -1,7 +1,7 @@
-import { palettes } from '../constants'
+import { palettes, type PaletteKey } from '../constants'
 
 export function NodeCard({ type, onAdd }: { type: string; onAdd: (type: string, pos?: { x: number; y: number }) => void }) {
-  const c = palettes[type as keyof typeof palettes] ?? palettes.get
+  const c = palettes[type as PaletteKey] ?? { dot: '#10b981', from: '#34d399', to: '#059669', border: 'rgba(16,185,129,0.2)', label: type.toUpperCase() }
   const isUrl = type === 'url'
 
   const onDragStart = (event: React.DragEvent) => {
