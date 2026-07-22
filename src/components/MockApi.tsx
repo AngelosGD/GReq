@@ -199,6 +199,8 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
     setDeleteTarget(null)
   }
 
+  const setCollection = (apiId: string, collection: string) => setMockApis((a) => a.map((x) => x.id === apiId ? { ...x, collection: collection || undefined } : x))
+  const allCollections = [...new Set(mockApis.map((a) => a.collection).filter(Boolean))] as string[]
   const setDelayMs = (apiId: string, ms: number) => setMockApis((a) => a.map((x) => x.id === apiId ? { ...x, delayMs: ms } : x))
   const setMethodStatusCode = (apiId: string, method: string, code: number) => setMockApis((a) => a.map((x) => x.id === apiId ? { ...x, methodBodies: { ...x.methodBodies, [method]: { ...(x.methodBodies[method] ?? { responseBody: x.responseBody, responseHeaders: x.responseHeaders }), statusCode: code } } } : x))
   const setMethodResponseBody = (apiId: string, method: string, body: string) => setMockApis((a) => a.map((x) => x.id === apiId ? { ...x, methodBodies: { ...x.methodBodies, [method]: { ...(x.methodBodies[method] ?? { statusCode: x.statusCode, responseHeaders: x.responseHeaders }), responseBody: body } } } : x))
@@ -388,6 +390,8 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
             onSetMethodResponseBody={(m, b) => setMethodResponseBody(activeApi.id, m, b)}
             onSetMethodResponseHeaders={(m, h) => setMethodResponseHeaders(activeApi.id, m, h)}
             onSetSampleData={(d) => setSampleData(activeApi.id, d)}
+            onSetCollection={(c) => setCollection(activeApi.id, c)}
+            collections={allCollections}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center">

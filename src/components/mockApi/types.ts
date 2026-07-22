@@ -30,6 +30,7 @@ export interface MockApiItem {
   delayMs: number
   methodBodies: Record<string, { statusCode: number; responseBody: string; responseHeaders: KeyValuePair[] }>
   sampleData: Record<string, string>[]
+  collection?: string
 }
 
 export const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'UPDATE'] as const

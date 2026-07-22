@@ -34,6 +34,8 @@ interface Props {
   onSetMethodResponseBody: (method: string, body: string) => void
   onSetMethodResponseHeaders: (method: string, headers: { key: string; value: string }[]) => void
   onSetSampleData: (data: Record<string, string>[]) => void
+  onSetCollection?: (collection: string) => void
+  collections?: string[]
 }
 
 export function MockApiEditor({
@@ -44,7 +46,7 @@ export function MockApiEditor({
   onStartApi, onStopApi, onFetchInspect, onFetchHistory, onTestInCanvas,
   onDuplicateApi, onExportApi, onConfirmDelete,
   onSetDelayMs, onSetMethodStatusCode, onSetMethodResponseBody, onSetMethodResponseHeaders,
-  onSetSampleData,
+  onSetSampleData, onSetCollection, collections,
 }: Props) {
   const [genCount, setGenCount] = useState(5)
   const effStatusCode = (m: string) => api.methodBodies?.[m]?.statusCode ?? api.statusCode
@@ -116,6 +118,21 @@ export function MockApiEditor({
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
                     </svg>
                   </button>
+                </div>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <svg className="w-3 h-3 text-zinc-300 dark:text-zinc-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                  </svg>
+                  <input
+                    list="collection-list"
+                    value={api.collection || ''}
+                    onChange={(e) => onSetCollection?.(e.target.value)}
+                    placeholder="Colección"
+                    className="text-[10px] font-medium bg-transparent text-zinc-500 dark:text-zinc-400 outline-none min-w-0 w-28 placeholder-zinc-300 dark:placeholder-zinc-600"
+                  />
+                  <datalist id="collection-list">
+                    {(collections || []).map((c) => <option key={c} value={c} />)}
+                  </datalist>
                 </div>
                 {api.methods.length > 1 && (
                   <div className="flex gap-0 mt-3">

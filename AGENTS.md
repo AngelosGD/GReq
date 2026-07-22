@@ -44,15 +44,13 @@ All Rust structs `#[serde(rename_all = "camelCase")]`.
 - **Sidebar drag keys** (HTML5 native Drag API, `NodeCard.tsx`): `'url'`, `'get'`, `'post'`, `'put'`, `'patch'`, `'delete'`, `'update'`
 
 ## Known Issues
-- **invoke hangs Tauri backend not ready**: `invoke` never rejects if backend not ready. Use `invokeWithTimeout()` (4s) from `MockApi.tsx:13-17` for any `invoke` racing backend init.
+- **invoke hangs Tauri backend not ready**: `invoke` never rejects if backend not ready. Use `invokeWithTimeout()` (`src/lib/tauri.ts`) for any `invoke` racing backend init. Default 4s; pass 3rd arg for longer (e.g. 35s for `make_request`).
 - **Mock servers don't persist between sessions**: Tokio processes die on app close. Tracked in `localStorage('greq-running-servers')`.
 - **Axum catch-all**: axum 0.7 uses `/*path`, not `/{*path}` (`mock.rs:688`).
 
 ## Limitations
-- OpenAPI YAML parser indent-based — no multi-line strings, arrays, `$ref`, anchors (`src/lib/openapi.ts`)
+- OpenAPI YAML parser indent-based — no anchors, circular refs, complex multi-line (`src/lib/openapi.ts`)
 - Mock UI exposes only `['GET', 'POST', 'DELETE', 'UPDATE']` (`src/components/mockApi/types.ts:35`); PUT/PATCH usable in flow but not mock UI
-- No per-route method config on import — all methods share one responseBody
 - Mock server lacks conditional responses, WebSocket, SSE
-- cURL/HAR/Postman/Insomnia import unsupported
-- `__history` endpoint (`GET /__history`) shows past requests; button in editor toolbar when server running (MockApiEditor.tsx:167-172)
-- No response validation or schema generation
+- No HAR/Insomnia import (Postman + OpenAPI + cURL supported)
+- No response schema auto-generation (manual validation available via ResponseSection validator)
