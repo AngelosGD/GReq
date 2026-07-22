@@ -495,6 +495,7 @@ export function MainApp() {
           onSignOut={onSignOut}
           setShowProfile={setShowProfile}
           setShowShortcuts={setShowShortcuts}
+          onToggleEnvPanel={() => setShowEnvPanel((v) => !v)}
           nodes={nodes}
           edges={edges}
         />

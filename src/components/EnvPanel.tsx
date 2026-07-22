@@ -11,6 +11,7 @@ export function EnvPanel({ onClose }: Props) {
     upsertVar, removeVar, renameProfile, addProfile, removeProfile,
   } = useEnvStore()
 
+  const [searchQuery, setSearchQuery] = useState('')
   const [newKey, setNewKey] = useState('')
   const [newValue, setNewValue] = useState('')
   const [adding, setAdding] = useState(false)
@@ -91,8 +92,22 @@ export function EnvPanel({ onClose }: Props) {
             </button>
           </div>
 
+          {activeVars.length >= 6 && (
+            <div className="relative mb-2">
+              <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-400 dark:text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar variable..."
+                className="w-full pl-7 pr-2 py-1.5 text-[11px] rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
+              />
+            </div>
+          )}
+
           <div className="space-y-1.5">
-            {activeVars.map((v) => (
+            {activeVars.filter((v) => !searchQuery || v.key.toLowerCase().includes(searchQuery.toLowerCase()) || v.value.toLowerCase().includes(searchQuery.toLowerCase())).map((v) => (
               <EnvVarRow
                 key={v.key}
                 envVar={v}
