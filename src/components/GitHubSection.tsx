@@ -24,6 +24,7 @@ interface GitHubRepo {
 interface Props {
   onClose: () => void
   onImport: (endpoints: GitHubEndpoint[]) => void
+  onCreateMockApi?: (endpoints: GitHubEndpoint[]) => void
 }
 
 const methodColors: Record<string, { text: string; bg: string; border: string; dot: string }> = {
@@ -103,7 +104,7 @@ function paramsFromEndpoint(ep: GitHubEndpoint): { path: { name: string; type: s
   return { path, query }
 }
 
-export function GitHubSection({ onClose, onImport }: Props) {
+export function GitHubSection({ onClose, onImport, onCreateMockApi }: Props) {
   const initialRepos = loadRepos()
   const initialSelected = (() => {
     const sel = localStorage.getItem(SELECTED_KEY)
@@ -900,16 +901,28 @@ export function GitHubSection({ onClose, onImport }: Props) {
                 <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
                   {selectedEndpoints.size} endpoint{selectedEndpoints.size !== 1 ? 's' : ''} seleccionado{selectedEndpoints.size !== 1 ? 's' : ''}
                 </span>
-                <button
-                  onClick={handleLlevarADiagrama}
-                  disabled={selectedEndpoints.size === 0}
-                  className="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-[12px] font-semibold bg-zinc-900 dark:bg-zinc-700 text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                  </svg>
-                  Llevar a diagrama
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => onCreateMockApi?.(selectedRepo.endpoints.filter((ep) => selectedEndpoints.has(epKey(ep))))}
+                    disabled={selectedEndpoints.size === 0}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                    </svg>
+                    Crear Mock API
+                  </button>
+                  <button
+                    onClick={handleLlevarADiagrama}
+                    disabled={selectedEndpoints.size === 0}
+                    className="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-[12px] font-semibold bg-zinc-900 dark:bg-zinc-700 text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                    </svg>
+                    Llevar a diagrama
+                  </button>
+                </div>
               </div>
             </>
           ) : (

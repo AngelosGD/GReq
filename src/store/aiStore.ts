@@ -15,14 +15,17 @@ interface AIStore {
 
 export const useAIStore = create<AIStore>((set) => ({
   provider: (localStorage.getItem('greq-ai-provider') as AIProvider) || 'local',
-  apiKey: '',
+  apiKey: localStorage.getItem('greq-ai-key') || '',
   modelLoading: false,
   modelProgress: 0,
   setProvider: (provider) => {
     localStorage.setItem('greq-ai-provider', provider)
     set({ provider })
   },
-  setApiKey: (apiKey) => set({ apiKey }),
+  setApiKey: (apiKey) => {
+    localStorage.setItem('greq-ai-key', apiKey)
+    set({ apiKey })
+  },
   setModelLoading: (modelLoading) => set({ modelLoading }),
   setModelProgress: (modelProgress) => set({ modelProgress }),
 }))

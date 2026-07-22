@@ -20,6 +20,8 @@ import { useExecStore, type StoredResponse } from '../store/execStore'
 import { resolveVariables } from '../utils/resolveVariables'
 import { getUrlData, getMethodData } from '../utils/nodeData'
 import { MockApi } from './MockApi'
+import { genId, randomPort } from './mockApi/types'
+import type { MockApiItem } from './mockApi/types'
 import { Canvas } from './Canvas'
 import { ContextMenu } from './ContextMenu'
 import { ConfigPanel } from './ConfigPanel'
@@ -559,6 +561,31 @@ export function MainApp() {
             {showGithubSection ? (
               <GitHubSection
                 onClose={() => setShowGithubSection(false)}
+                onCreateMockApi={(endpoints) => {
+                  const raw = localStorage.getItem('greq-mock-apis')
+                  const existing: MockApiItem[] = raw ? JSON.parse(raw) : []
+                  const newApis = endpoints.map((ep) => ({
+                    id: genId(),
+                    name: ep.summary || `${ep.method} ${ep.path}`,
+                    methods: [ep.method],
+                    path: ep.path.replace(/^\//, ''),
+                    port: randomPort(),
+                    running: false,
+                    serverId: null,
+                    statusCode: 200,
+                    responseBody: JSON.stringify({ id: 1, name: 'ejemplo' }, null, 2),
+                    responseHeaders: [],
+                    delayMs: 0,
+                    methodBodies: {},
+                    fields: (ep.params || []).map((p) => ({ name: p.name, type: 'string' })),
+                    sampleData: [],
+                    pinned: false,
+                  }))
+                  const merged = [...newApis, ...existing].slice(0, 20)
+                  localStorage.setItem('greq-mock-apis', JSON.stringify(merged))
+                  setShowGithubSection(false)
+                  setShowMockApi(true)
+                }}
                 onImport={(endpoints) => {
                   const newNodes = endpoints.flatMap((ep, i) => {
                     const baseX = i * 400

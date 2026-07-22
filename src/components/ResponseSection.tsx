@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Node } from '@xyflow/react'
 import { useExecStore } from '../store/execStore'
+import { validateAgainstSchema } from '../utils/validateSchema'
 
 function simpleDiff(a: string, b: string): { type: 'same' | 'added' | 'removed'; line: string }[] {
   const linesA = a.split('\n')
@@ -28,6 +29,8 @@ export function ResponseSection({ node, setNodeData }: { node: Node; setNodeData
   const [diffTargetA, setDiffTargetA] = useState(0)
   const [diffTargetB, setDiffTargetB] = useState(0)
   const [showHistory, setShowHistory] = useState(false)
+  const [schemaText, setSchemaText] = useState('')
+  const [validation, setValidation] = useState<{ errors: { path: string; message: string }[] } | null>(null)
   const history = useExecStore((s) => s.responseHistory[node.id])
   const d = (node.data as Record<string, unknown>) ?? {}
   const responsesList = d.responses as unknown[] | undefined
@@ -158,6 +161,52 @@ export function ResponseSection({ node, setNodeData }: { node: Node; setNodeData
                 {prettify ? (() => { try { return JSON.stringify(JSON.parse(res.body), null, 2) } catch { return res.body } })() : res.body}
               </pre>
             </div>
+
+            <details className="group">
+              <summary className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors list-none flex items-center gap-1.5 mt-2">
+                <svg className="w-3 h-3 text-zinc-400 group-open:rotate-90 transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                Validar contra schema
+              </summary>
+              <div className="mt-2 space-y-2">
+                <textarea
+                  value={schemaText}
+                  onChange={(e) => { setSchemaText(e.target.value); setValidation(null) }}
+                  placeholder='{"type": "object", "properties": {"id": {"type": "integer"}, "name": {"type": "string"}}, "required": ["id"]}'
+                  className="w-full h-24 text-[10px] font-mono px-2 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 resize-none"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      try {
+                        const schema = JSON.parse(schemaText)
+                        const data = JSON.parse(res.body)
+                        const errors = validateAgainstSchema(data, schema)
+                        setValidation({ errors })
+                      } catch (e) {
+                        setValidation({ errors: [{ path: '', message: e instanceof Error ? e.message : 'Error al validar' }] })
+                      }
+                    }}
+                    className="text-[10px] px-3 py-1 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors"
+                  >Validar</button>
+                  {validation && (
+                    <button
+                      onClick={() => setValidation(null)}
+                      className="text-[10px] px-3 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                    >Limpiar</button>
+                  )}
+                </div>
+                {validation && (
+                  <div className={`text-[10px] font-mono px-2 py-1.5 rounded-lg ${validation.errors.length === 0 ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400'}`}>
+                    {validation.errors.length === 0
+                      ? '✓ Schema válido — sin errores'
+                      : validation.errors.map((e, i) => (
+                          <div key={i}>{e.path ? `${e.path}: ` : ''}{e.message}</div>
+                        ))
+                    }
+                  </div>
+                )}
+              </div>
+            </details>
           </div>
         )
       })

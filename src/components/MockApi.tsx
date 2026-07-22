@@ -5,6 +5,7 @@ import { useEnvStore } from '../store/envStore'
 import { getMockApis, saveMockApi, deleteMockApi } from '../lib/database'
 import { trackServer, untrackServer, getActiveServers, clearTrackedServers } from '../lib/runningServers'
 import { parseOpenApiSpec } from '../lib/openapi'
+import { parsePostmanCollection } from '../lib/parsePostman'
 import { MockApiSidebar } from './mockApi/MockApiSidebar'
 import { MockApiEditor } from './mockApi/MockApiEditor'
 import { MockApiCreateModal } from './mockApi/MockApiCreateModal'
@@ -61,6 +62,9 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
   const [showOpenApiImport, setShowOpenApiImport] = useState(false)
   const [openApiText, setOpenApiText] = useState('')
   const [openApiLoading, setOpenApiLoading] = useState(false)
+  const [showPostmanImport, setShowPostmanImport] = useState(false)
+  const [postmanText, setPostmanText] = useState('')
+  const [postmanLoading, setPostmanLoading] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -264,6 +268,39 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
     finally { setOpenApiLoading(false) }
   }
 
+  const handleImportPostman = async () => {
+    if (!postmanText.trim()) return
+    setPostmanLoading(true)
+    try {
+      const endpoints = parsePostmanCollection(postmanText)
+      for (const ep of endpoints) {
+        const fields = ep.body ? [{ name: 'id', type: 'int' }, { name: 'data', type: 'string' }] : []
+        const api: Partial<MockApiItem> = {
+          id: genId(),
+          name: ep.summary || `${ep.method} ${ep.path}`,
+          methods: [ep.method],
+          path: ep.path,
+          port: randomPort(),
+          running: false,
+          serverId: null,
+          statusCode: 200,
+          responseBody: ep.body || defaultBody,
+          responseHeaders: ep.headers.map((h) => ({ key: h.name, value: h.value })),
+          delayMs: 0,
+          methodBodies: {},
+          fields,
+          sampleData: [],
+          pinned: false,
+        }
+        setMockApis((a) => a.length >= 20 ? a : [...a, api as MockApiItem])
+      }
+      setShowPostmanImport(false)
+      setPostmanText('')
+      alert(`${endpoints.length} endpoint(s) importados correctamente`)
+    } catch (e) { alert(`Error al importar: ${e}`) }
+    finally { setPostmanLoading(false) }
+  }
+
   const prevApiIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (activeApi && activeApi.id !== prevApiIdRef.current) {
@@ -289,6 +326,14 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
             </svg>
             Importar OpenAPI
+          </button>
+          <button onClick={() => setShowPostmanImport(true)}
+            className="flex items-center justify-center gap-1.5 w-full px-3 py-1.5 rounded-lg text-[10px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 active:scale-[0.98] transition-all mt-1"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.571a4.5 4.5 0 00-5.972-5.972l-1.757 1.757" />
+            </svg>
+            Importar Postman
           </button>
         </div>
       </div>
@@ -443,6 +488,32 @@ export function MockApi({ onClose, onTestInCanvas }: Props) {
                 className="px-3.5 py-1.5 rounded-lg text-[11px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] transition-all flex items-center gap-1.5">
                 {openApiLoading && <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
                 {openApiLoading ? 'Importando...' : 'Importar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPostmanImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/15 dark:bg-black/40 backdrop-blur-sm" onClick={() => setShowPostmanImport(false)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-tinted-lg dark:shadow-tinted-lg border border-zinc-200/70 dark:border-zinc-700/70 w-[520px]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800">
+              <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Importar Postman</h3>
+              <button onClick={() => setShowPostmanImport(false)} className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Pegá el contenido de una colección Postman (JSON exportado) para crear APIs de prueba.</p>
+              <textarea value={postmanText} onChange={(e) => setPostmanText(e.target.value)} placeholder='{"info":{"name":"Mi API"},"item":[{"name":"Get Users","request":{...}}]}' rows={10}
+                className="w-full bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/60 rounded-xl p-3 font-mono text-[11px] text-zinc-700 dark:text-zinc-300 outline-none focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20 transition-all resize-none placeholder-zinc-300 dark:placeholder-zinc-500" />
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-zinc-100 dark:border-zinc-800">
+              <button onClick={() => setShowPostmanImport(false)} className="px-3.5 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">Cancelar</button>
+              <button onClick={handleImportPostman} disabled={postmanLoading || !postmanText.trim()}
+                className="px-3.5 py-1.5 rounded-lg text-[11px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] transition-all flex items-center gap-1.5">
+                {postmanLoading && <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                {postmanLoading ? 'Importando...' : 'Importar'}
               </button>
             </div>
           </div>

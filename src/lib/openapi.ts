@@ -6,6 +6,7 @@ interface ParsedEndpoint {
   method: string
   summary: string
   params: { name: string; type: string }[]
+  responseBody: string
 }
 
 function resolveJsonPointer(root: any, ref: string): any {
@@ -114,14 +115,40 @@ export function simpleYamlParse(text: string): any {
     if (!current) continue
 
     if (content.startsWith('- ')) {
-      const itemVal = parseYamlValue(content.slice(2).trim())
+      const remainder = content.slice(2)
+      const colonIdx = remainder.indexOf(':')
       const top = stack[stack.length - 1]
-      if (top.obj === BLOCK_MARKER && top.parent && top.key) {
-        const arr: any[] = [itemVal]
-        top.parent[top.key] = arr
-        top.obj = arr
-      } else if (Array.isArray(top.obj)) {
-        top.obj.push(itemVal)
+
+      if (colonIdx >= 0) {
+        const newObj: any = {}
+        if (top.obj === BLOCK_MARKER && top.parent && top.key) {
+          const arr: any[] = [newObj]
+          top.parent[top.key] = arr
+          top.obj = arr
+        } else if (Array.isArray(top.obj)) {
+          top.obj.push(newObj)
+        } else {
+          const arr = [newObj]
+          const parent = stack[stack.length - 2]?.obj
+          if (parent && top.key) parent[top.key] = arr
+          top.obj = arr
+        }
+        const itemKey = remainder.slice(0, colonIdx).trim()
+        const itemVal = remainder.slice(colonIdx + 1).trim()
+        if (itemVal === '') {
+          stack.push({ obj: newObj, indent: indent + 2, parent: newObj, key: itemKey })
+        } else {
+          newObj[itemKey] = parseYamlValue(itemVal)
+        }
+      } else {
+        const itemVal = parseYamlValue(remainder.trim())
+        if (top.obj === BLOCK_MARKER && top.parent && top.key) {
+          const arr: any[] = [itemVal]
+          top.parent[top.key] = arr
+          top.obj = arr
+        } else if (Array.isArray(top.obj)) {
+          top.obj.push(itemVal)
+        }
       }
       continue
     }
@@ -181,6 +208,29 @@ function extractFieldsFromSchema(schema: any): { name: string; type: string }[] 
   return fields
 }
 
+function schemaToSample(schema: any, depth = 0): any {
+  if (!schema || typeof schema !== 'object' || depth > 5) return '{{ejemplo}}'
+  if (schema.example !== undefined) return schema.example
+  if (schema.default !== undefined) return schema.default
+  if (schema.enum && schema.enum.length > 0) return schema.enum[0]
+  if (schema.type === 'object' || schema.properties) {
+    const obj: any = {}
+    if (schema.properties) {
+      for (const [key, val] of Object.entries(schema.properties)) {
+        obj[key] = schemaToSample(val as any, depth + 1)
+      }
+    }
+    return obj
+  }
+  if (schema.type === 'array') {
+    if (schema.items) return [schemaToSample(schema.items, depth + 1)]
+    return []
+  }
+  if (schema.type === 'integer' || schema.type === 'number') return 1
+  if (schema.type === 'boolean') return true
+  return 'ejemplo'
+}
+
 function parsePaths(spec: any): ParsedEndpoint[] {
   const endpoints: ParsedEndpoint[] = []
   const paths = spec.paths || {}
@@ -193,11 +243,13 @@ function parsePaths(spec: any): ParsedEndpoint[] {
       const fields = extractFieldsFromSchema(schema)
       const bodySchema = d.requestBody?.content?.['application/json']?.schema
       const bodyFields = extractFieldsFromSchema(bodySchema)
+      const sample = schema ? schemaToSample(schema) : null
       endpoints.push({
         path: path.replace(/\{(\w+)\}/g, ':$1'),
         method: method.toUpperCase(),
         summary: d.summary || `${method.toUpperCase()} ${path}`,
         params: fields.length > 0 ? fields : bodyFields,
+        responseBody: sample ? JSON.stringify(sample, null, 2) : JSON.stringify({ id: 1, name: 'ejemplo' }, null, 2),
       })
     }
   }
@@ -242,6 +294,15 @@ export function parseOpenApiSpec(text: string): Partial<MockApiItem>[] {
       sampleData.push(row)
     }
 
+    const methodBodies: Record<string, { statusCode: number; responseBody: string; responseHeaders: { key: string; value: string }[] }> = {}
+    let defaultResponseBody = JSON.stringify({ id: 1, name: 'ejemplo' }, null, 2)
+    for (const ep of eps) {
+      if (ep.responseBody) {
+        methodBodies[ep.method] = { statusCode: 200, responseBody: ep.responseBody, responseHeaders: [] }
+        defaultResponseBody = ep.responseBody
+      }
+    }
+
     apis.push({
       id: genId(),
       name: eps[0].summary.split(' ').slice(0, 3).join(' ') || info.title || 'API',
@@ -253,13 +314,11 @@ export function parseOpenApiSpec(text: string): Partial<MockApiItem>[] {
       statusCode: 200,
       responseHeaders: [],
       delayMs: 0,
-      methodBodies: {},
+      methodBodies,
       fields: allFields,
       sampleData,
       pinned: false,
-      responseBody: sampleData.length > 0
-        ? JSON.stringify(sampleData.map((row, i) => ({ id: i + 1, ...row })), null, 2)
-        : JSON.stringify({ id: 1, name: 'ejemplo' }, null, 2),
+      responseBody: defaultResponseBody,
     })
   }
 

@@ -122,29 +122,33 @@ function templateMockApi(description: string) {
 }
 
 function templateFlow(description: string) {
-  const baseUrl = 'https://jsonplaceholder.typicode.com'
   const entity = detectEntity(description)
   const entityPlural = `${entity}s`.toLowerCase()
+  const methods = pickMethods(description)
+  const primaryMethod: string = methods[0] === 'POST' ? 'POST' : 'GET'
+  const hasBody = methods.some((m) => m === 'POST' || m === 'PUT' || m === 'PATCH')
+
+  const methodLabels: Record<string, string> = { GET: 'Obtener', POST: 'Crear', PUT: 'Actualizar', DELETE: 'Eliminar' }
+  const label = methodLabels[primaryMethod] || primaryMethod
 
   const urlNode = {
     type: 'url' as const,
     position: { x: 0, y: 0 },
     data: {
-      url: `${baseUrl}/${entityPlural}`,
-      title: `Obtener ${entityPlural}`,
+      url: `https://api.example.com/${entityPlural}`,
+      title: `${label} ${entityPlural}`,
       params: [],
       headers: [],
     },
   }
 
-  const method = pickMethods(description)[0] === 'POST' ? 'POST' as const : 'GET' as const
   const methodNode = {
     type: 'method' as const,
     position: { x: 350, y: 0 },
     data: {
-      method: method as string,
+      method: primaryMethod,
       headers: [],
-      body: method === 'POST' ? generateBody(COMMON_FIELDS[entity] ?? DEFAULT_FIELDS) : '',
+      body: hasBody ? generateBody(COMMON_FIELDS[entity] ?? DEFAULT_FIELDS) : '',
       bodyType: 'json',
       auth: 'none' as const,
       authValue: '',
