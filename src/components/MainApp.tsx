@@ -46,6 +46,14 @@ type SidebarMode = 'options' | 'nodes'
 const initialNodes: Node[] = []
 const initialEdges: Edge[] = []
 
+function loadLocalHistory<T = Record<string, unknown>>(): T[] {
+  try {
+    return JSON.parse(localStorage.getItem('greq-history') || '[]')
+  } catch {
+    return []
+  }
+}
+
 const methodMap: Record<string, HttpMethod> = {
   get: 'GET', post: 'POST', put: 'PUT', patch: 'PATCH', delete: 'DELETE', update: 'UPDATE',
 }
@@ -124,7 +132,7 @@ export function MainApp() {
           nodes: [{ ...node, data: mergedData }, ...methodNodes],
           edges: methodEdges,
         }
-        const existing: any[] = JSON.parse(localStorage.getItem('greq-history') || '[]')
+        const existing = loadLocalHistory()
         const idx = existing.findIndex((h: any) => h.id === id)
         if (idx >= 0) existing[idx] = entry
         else existing.unshift(entry)
@@ -245,7 +253,7 @@ export function MainApp() {
   const saveGroupsToHistory = useCallback(() => {
     const urlNodes = nodes.filter((n) => n.type === 'url' && getUrlData(n).title)
     if (urlNodes.length === 0) return
-    const existing: any[] = JSON.parse(localStorage.getItem('greq-history') || '[]')
+    const existing = loadLocalHistory()
     for (const urlNode of urlNodes) {
       const { title, url } = getUrlData(urlNode)
       if (!title) continue
@@ -382,7 +390,7 @@ export function MainApp() {
         nodes: [urlNode, ...methodNodes],
         edges: methodEdges,
       }
-      const existing: any[] = JSON.parse(localStorage.getItem('greq-history') || '[]')
+      const existing = loadLocalHistory()
       const idx = existing.findIndex((h: any) => h.id === urlNode.id)
       if (idx >= 0) existing[idx] = entry
       else existing.unshift(entry)

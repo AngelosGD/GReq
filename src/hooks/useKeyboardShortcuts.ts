@@ -46,7 +46,8 @@ export function useKeyboardShortcuts({
         }
         return
       }
-      const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName) || (e.target as HTMLElement)?.isContentEditable
+      const el = e.target as HTMLElement | null
+      const isInput = !!el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable)
       if ((e.key === 'Delete' || e.key === 'Supr' || e.key === 'Backspace') && selectedRef.current && !isInput) {
         if ((selectedRef.current.data as Record<string, unknown>)?.locked) return
         e.preventDefault()

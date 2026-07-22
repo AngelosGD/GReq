@@ -22,7 +22,18 @@ impl serde::Serialize for AppError {
     where
         S: serde::ser::Serializer,
     {
-        serializer.serialize_str(self.to_string().as_ref())
+        #[derive(Serialize)]
+        struct ErrPayload {
+            kind: &'static str,
+            message: String,
+        }
+        let payload = match self {
+            AppError::Network(m) => ErrPayload { kind: "network", message: m.clone() },
+            AppError::InvalidMethod(m) => ErrPayload { kind: "invalid_method", message: m.clone() },
+            AppError::Server(m) => ErrPayload { kind: "server", message: m.clone() },
+            AppError::NotFound(m) => ErrPayload { kind: "not_found", message: m.clone() },
+        };
+        payload.serialize(serializer)
     }
 }
 

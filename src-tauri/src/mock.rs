@@ -9,6 +9,7 @@ use axum::{
     routing::any,
     Json, Router,
 };
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -71,6 +72,11 @@ pub struct RequestLog {
     pub body: String,
 }
 
+struct RequestLogs {
+    last: Option<RequestLog>,
+    history: Vec<RequestLog>,
+}
+
 struct AppState {
     methods: Vec<String>,
     method_configs: Vec<MethodConfig>,
@@ -82,22 +88,14 @@ struct AppState {
     sample_data: Vec<HashMap<String, String>>,
     base_path: String,
     bind_port: u16,
-    last_request: Mutex<Option<RequestLog>>,
-    request_history: Mutex<Vec<RequestLog>>,
+    logs: Mutex<RequestLogs>,
     rate_limit: u64,
     rate_window: Mutex<Vec<Instant>>,
     env_vars: HashMap<String, String>,
 }
 
-fn pseudo_random(seed: u128) -> u64 {
-    let x = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-    (x >> 33) as u64
-}
-
-fn dynamic_val(template: &str) -> String {
+fn dynamic_val(template: &str, rng: &mut SmallRng) -> String {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
-    let base_seed = now.as_nanos();
-    let r = pseudo_random(base_seed);
 
     let names = [
         "Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace",
@@ -114,21 +112,15 @@ fn dynamic_val(template: &str) -> String {
         "foo", "bar", "baz", "qux", "quux", "corge", "grault", "garply",
     ];
 
-    let idx = |i: usize, len: usize| -> usize { (r.wrapping_add(i as u64)) as usize % len };
-    let ridx = |i: usize, len: usize| -> usize { (r.wrapping_mul((i + 1) as u64)) as usize % len };
-
     match template {
         "$uuid" => {
-            let r1 = pseudo_random(now.as_nanos().wrapping_add(1));
-            let r2 = pseudo_random(now.as_nanos().wrapping_add(2));
-            let r3 = pseudo_random(now.as_nanos().wrapping_add(3));
+            let b: [u8; 16] = rng.gen();
             format!(
-                "{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}",
-                (r1 >> 32) as u32,
-                (r1 & 0xFFFF) as u16,
-                (r2 >> 48) as u16 & 0xFFF,
-                ((r2 >> 32) as u16 & 0x3FFF) | 0x8000,
-                ((r2 & 0xFFFFFFFF) as u64) << 32 | (r3 as u64)
+                "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-4{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+                b[0], b[1], b[2], b[3], b[4], b[5],
+                b[6] & 0x0f | 0x40, b[7],
+                b[8] & 0x3f | 0x80, b[9],
+                b[10], b[11], b[12], b[13], b[14], b[15],
             )
         }
         "$timestamp" => {
@@ -157,27 +149,27 @@ fn dynamic_val(template: &str) -> String {
             let day = d + 1;
             format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z", y, m, day, hours, minutes, seconds, nanos / 1_000_000)
         }
-        "$randomInt" => format!("{}", r % 10000),
-        "$randomBoolean" => if r % 2 == 0 { "true".into() } else { "false".into() },
+        "$randomInt" => format!("{}", rng.gen_range(0..10000)),
+        "$randomBoolean" => format!("{}", rng.gen_bool(0.5)),
         "$randomName" => {
-            let first = names[idx(0, names.len())];
-            let last = surnames[idx(1, surnames.len())];
+            let first = names[rng.gen_range(0..names.len())];
+            let last = surnames[rng.gen_range(0..surnames.len())];
             format!("{} {}", first, last)
         }
         "$randomEmail" => {
-            let name = names[idx(0, names.len())].to_lowercase();
-            let domain = ["gmail.com", "outlook.com", "example.com", "test.io"][ridx(0, 4)];
+            let name = names[rng.gen_range(0..names.len())].to_lowercase();
+            let domains = ["gmail.com", "outlook.com", "example.com", "test.io"];
+            let domain = domains[rng.gen_range(0..domains.len())];
             format!("{}@{}", name, domain)
         }
-        "$randomWord" => words[idx(0, words.len())].to_string(),
+        "$randomWord" => words[rng.gen_range(0..words.len())].to_string(),
         t if t.starts_with("$randomNumber(") && t.ends_with(')') => {
             let inner = &t[14..t.len()-1];
             if let Some((a, b)) = inner.split_once(',') {
                 let min = a.trim().parse::<i64>().unwrap_or(0);
                 let max = b.trim().parse::<i64>().unwrap_or(100);
                 if max > min {
-                    let range = (max - min + 1) as u64;
-                    let val = min + (r % range) as i64;
+                    let val = rng.gen_range(min..=max);
                     format!("{}", val)
                 } else {
                     format!("{}", min)
@@ -191,6 +183,7 @@ fn dynamic_val(template: &str) -> String {
 }
 
 fn resolve_dynamic(body: &str) -> String {
+    let mut rng = SmallRng::from_entropy();
     let patterns = [
         "$uuid",
         "$timestamp",
@@ -204,7 +197,7 @@ fn resolve_dynamic(body: &str) -> String {
     for pat in &patterns {
         let template = format!("{{{{{}}}}}", pat);
         if result.contains(&template) {
-            let resolved = dynamic_val(pat);
+            let resolved = dynamic_val(pat, &mut rng);
             result = result.replace(&template, &resolved);
         }
     }
@@ -217,7 +210,7 @@ fn resolve_dynamic(body: &str) -> String {
                 match end {
                     Some(e) => {
                         let inner = &after[2..e];
-                        let resolved = dynamic_val(inner);
+                        let resolved = dynamic_val(inner, &mut rng);
                         result.replace_range(s..s + e + 2, &resolved);
                     }
                     None => break,
@@ -308,16 +301,16 @@ fn extract_id(base: &str, req_path: &str) -> Option<String> {
 }
 
 async fn inspect_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let log = state.last_request.lock().await.as_ref().cloned();
-    match log {
+    let logs = state.logs.lock().await;
+    match &logs.last {
         Some(log) => (axum::http::StatusCode::OK, Json(log)).into_response(),
         None => (axum::http::StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "No requests yet"}))).into_response(),
     }
 }
 
 async fn history_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let history = state.request_history.lock().await.clone();
-    Json(history)
+    let logs = state.logs.lock().await;
+    Json(logs.history.clone())
 }
 
 fn has_smart_data(state: &AppState) -> bool {
@@ -520,12 +513,12 @@ async fn mock_handler(
         path: req_path.clone(),
         body: body.clone(),
     };
-    *state.last_request.lock().await = Some(log_entry.clone());
     {
-        let mut hist = state.request_history.lock().await;
-        hist.push(log_entry);
-        if hist.len() > 50 {
-            hist.remove(0);
+        let mut logs = state.logs.lock().await;
+        logs.last = Some(log_entry.clone());
+        logs.history.push(log_entry);
+        if logs.history.len() > 50 {
+            logs.history.remove(0);
         }
     }
 
@@ -675,8 +668,7 @@ pub async fn start_mock_server(
         sample_data: config.sample_data.clone(),
         base_path: clean_path.clone(),
         bind_port: port,
-        last_request: Mutex::new(None),
-        request_history: Mutex::new(Vec::new()),
+        logs: Mutex::new(RequestLogs { last: None, history: Vec::new() }),
         rate_limit: config.rate_limit,
         rate_window: Mutex::new(Vec::new()),
         env_vars: config.env_vars,

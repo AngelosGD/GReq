@@ -27,7 +27,7 @@ export async function getHistory(userId: string): Promise<HistoryEntry[]> {
     Query.limit(20),
   ])
   return res.documents.map((d) => {
-    const raw = JSON.parse(d.data as string)
+    const raw = typeof d.data === 'string' ? JSON.parse(d.data) : {}
     return { ...raw, id: d.entryId }
   })
 }

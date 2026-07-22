@@ -7,6 +7,7 @@ use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse};
 use axum::routing::get;
 use axum::Router;
+use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -155,11 +156,7 @@ pub async fn start_oauth_webview(
 }
 
 fn random_state(len: usize) -> String {
-    use rand::RngCore;
-    let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".chars().collect();
-    let mut buf = vec![0u8; len];
-    rand::rngs::OsRng.fill_bytes(&mut buf);
-    buf.iter().map(|b| chars[*b as usize % chars.len()]).collect()
+    Alphanumeric.sample_string(&mut rand::rngs::OsRng, len)
 }
 
 #[tauri::command]

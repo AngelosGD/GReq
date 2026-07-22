@@ -5,7 +5,9 @@
 npm run dev          # Vite dev (port 1420, strictPort)
 npm run tauri dev    # Tauri dev — auto-runs npm run dev
 npm run build        # tsc && vite build
+npm run preview      # Vite preview (serve dist/)
 npm run tauri build  # Release — auto-runs npm run build
+npm run tauri        # Tauri CLI passthrough
 ```
 No lint/test/format/codegen. No test files/scripts/fixtures. `noUnusedLocals` + `noUnusedParameters` in tsconfig — `tsc` fail on unused imports. `src-tauri/` excluded from Vite watch (vite.config.ts:21). Build outputs: `dist/` (Vite), `src-tauri/target/` (Rust).
 
@@ -21,7 +23,7 @@ No lint/test/format/codegen. No test files/scripts/fixtures. `noUnusedLocals` + 
 All Rust structs `#[serde(rename_all = "camelCase")]`.
 
 - `make_request` — auto-prepend `http://` if no scheme, 30s timeout, maps UPDATE→PUT
-- `start_mock_server` / `stop_mock_server` / `stop_all_mock_servers` — axum mock on `127.0.0.1:{port}` (random if 0). MockConfig: `{ path, methods, status, headers, body, port, delayMs, methodConfigs, fields, sampleData, rateLimit (0=off), env_vars }`. Smart per-method: GET returns array/list or single (/:id), POST merges body+fields → 201+gen ID, DELETE → `{deleted:true,id}`, UPDATE/PUT/PATCH → `{updated:true,id,data}`. Fields typed: `string`/`int`/`bool`. Pagination via `?page=N&limit=M` + `X-Total-Count`/`Link`. Rate limiting: 429 + `Retry-After`. Env vars: `{{env.VAR_NAME}}` resolved from `env_vars`.
+- `start_mock_server` / `stop_mock_server` / `stop_all_mock_servers` — axum mock on `127.0.0.1:{port}` (random if 0). MockConfig: `{ path, methods, status, headers, body, port, delayMs, methodConfigs, fields, sampleData, rateLimit (0=off), env_vars }`. Smart per-method: GET returns array/list or single (/:id), POST merges body+fields → 201+gen ID, DELETE → `{deleted:true,id}`, UPDATE/PUT/PATCH → `{updated:true,id,data}`. Fields typed: `string`/`int`/`bool`/`float`. Pagination via `?page=N&limit=M` + `X-Total-Count`/`Link`. Rate limiting: 429 + `Retry-After`. Env vars: `{{env.VAR_NAME}}` resolved from `env_vars`.
 - `start_oauth_server` / `wait_oauth_callback` / `start_oauth_webview` — ephemeral axum callback + Tauri WebviewWindow for Appwrite OAuth, intercepts `cloud.appwrite.io/console/auth/oauth2/success`
 - `login_with_github` / `login_with_google` — backend OAuth (ephemeral axum → browser → callback → code exchange → user fetch). Frontend creates Appwrite user with deterministic password: `greq_oauth_` + sanitized email `(replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0,10))` + `'A1'` (`AuthPage.tsx:75-79`).
 - Dynamic templates (`mock.rs` `resolve_dynamic`): `{{$uuid}}`, `{{$timestamp}}`, `{{$randomInt}}`, `{{$randomBoolean}}`, `{{$randomName}}`, `{{$randomEmail}}`, `{{$randomWord}}`, `{{$randomNumber(min,max)}}`.
@@ -50,7 +52,7 @@ All Rust structs `#[serde(rename_all = "camelCase")]`.
 
 ## Limitations
 - OpenAPI YAML parser indent-based — no anchors, circular refs, complex multi-line (`src/lib/openapi.ts`)
-- Mock UI exposes only `['GET', 'POST', 'DELETE', 'UPDATE']` (`src/components/mockApi/types.ts:35`); PUT/PATCH usable in flow but not mock UI
+- Mock UI only shows `FilterMethod` dropdown (`src/components/mockApi/types.ts:3`); all 6 methods exposed via `methods` array (line 36)
 - Mock server lacks conditional responses, WebSocket, SSE
 - No HAR/Insomnia import (Postman + OpenAPI + cURL supported)
 - No response schema auto-generation (manual validation available via ResponseSection validator)
