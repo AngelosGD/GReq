@@ -50,14 +50,21 @@ pub async fn start_oauth_server(
     let app = Router::new().route(
         "/callback",
         get(move |Query(params): Query<HashMap<String, String>>| async move {
-            let user_id = params.get("userId").cloned().unwrap_or_default();
-            let secret = params.get("secret").cloned().unwrap_or_default();
-            state_clone.lock().await.insert(port, Some((user_id, secret)));
-            (
-                StatusCode::OK,
-                [("Content-Type", "text/html; charset=utf-8")],
-                "<html><body style='display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;background:#fafafa'><div style='text-align:center'><h2 style='color:#18181b;margin-bottom:8px'>✅ Sesión iniciada</h2><p style='color:#71717a'>Ya puedes cerrar esta ventana y volver a GReq</p></div></body></html>",
-            )
+            match (params.get("userId"), params.get("secret")) {
+                (Some(uid), Some(secret)) if !uid.is_empty() && !secret.is_empty() => {
+                    state_clone.lock().await.insert(port, Some((uid.clone(), secret.clone())));
+                    (
+                        StatusCode::OK,
+                        [("Content-Type", "text/html; charset=utf-8")],
+                        "<html><body style='display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;background:#fafafa'><div style='text-align:center'><h2 style='color:#18181b;margin-bottom:8px'>Sesi\u{f3}n iniciada</h2><p style='color:#71717a'>Ya puedes cerrar esta ventana y volver a GReq</p></div></body></html>",
+                    )
+                }
+                _ => (
+                    StatusCode::BAD_REQUEST,
+                    [("Content-Type", "text/html; charset=utf-8")],
+                    "<html><body style='display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;background:#fafafa'><div style='text-align:center'><h2 style='color:#dc2626;margin-bottom:8px'>Error de autenticaci\u{f3}n</h2><p style='color:#71717a'>Faltan par\u{e1}metros de callback</p></div></body></html>",
+                ),
+            }
         }),
     );
 
