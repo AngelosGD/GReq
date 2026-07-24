@@ -17,7 +17,8 @@ npm run tauri dev
 ## Build
 
 ```bash
-npm run tauri build
+npm run tauri build                                    # 64-bit
+npm run tauri build -- --target i686-pc-windows-msvc   # 32-bit (rustup target add i686-pc-windows-msvc)
 ```
 
 ## Características

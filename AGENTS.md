@@ -6,10 +6,11 @@ npm run dev          # Vite dev (port 1420, strictPort)
 npm run tauri dev    # Tauri dev — auto-runs npm run dev
 npm run build        # tsc && vite build
 npm run preview      # Vite preview (serve dist/)
-npm run tauri build  # Release — auto-runs npm run build
+npm run tauri build  # Release 64-bit (default)
+npm run tauri -- --target i686-pc-windows-msvc  # Release 32-bit (add target: rustup target add i686-pc-windows-msvc)
 npm run tauri        # Tauri CLI passthrough
 ```
-No lint/test/format/codegen scripts. No test files. `noUnusedLocals` + `noUnusedParameters` in tsconfig — `tsc` fail on unused imports. `src-tauri/` excluded from Vite watch. Build outputs: `dist/` (Vite), `src-tauri/target/` (Rust).
+No lint/test/format/codegen scripts. No test files. `noUnusedLocals` + `noUnusedParameters` in tsconfig — `tsc` fail on unused imports. `src-tauri/` excluded from Vite watch. Build outputs: `dist/` (Vite), `src-tauri/target/` (Rust). Bundle: NSIS `.exe` in `src-tauri/target/{triple}/release/bundle/nsis/`.
 
 ## Stack & Architecture
 - **Frontend** (`src/`): React 18 + Vite 5 + TailwindCSS 3 (`darkMode: 'class'`) + Geist font (Google Fonts in `index.html`). No router — screen via `appStore.screen: onboarding|auth|main|settings` (`src/store/appStore.ts`).
@@ -68,3 +69,6 @@ All Rust structs `#[serde(rename_all = "camelCase")]`.
 - **Codegen** (`src/lib/codegen.ts`): cURL, HTTPie, Python, JavaScript, Rust. Resolves env if toggled.
 - **AI Assistant** (`src/lib/ai.ts`): 100% offline template-based. No API key. Not real LLM.
 - **History**: Auto-save when URL node gets title (`MainApp.tsx:118-146`). Synced to Appwrite if logged in. 20 entries max.
+- **Canvas** (`src/components/Canvas.tsx`): `connectionLineComponent` + `isValidConnection` active. Only URL→Method and Method→Method connections allowed.
+- **Modals** extracted to `MainModals.tsx` since `c42b45e`.
+- **Collections** (`src/lib/collections.ts`): schema-validated on load. Corrupted data auto-clears.
