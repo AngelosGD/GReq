@@ -4,6 +4,7 @@ import { NodeSearch } from './NodeSearch'
 import { AuthGuard } from './AuthGuard'
 import { useFlowStore } from '../store/flowStore'
 import { useEnvStore } from '../store/envStore'
+import type { AuthUser } from '../store/authStore'
 
 export function TopBar({
   undo, redo, canUndo, canRedo,
@@ -23,7 +24,7 @@ export function TopBar({
   dark: boolean
   setDark: (v: boolean | ((prev: boolean) => boolean)) => void
   goToSettings: () => void
-  user: any
+  user: AuthUser | null
   onSignOut: () => void
   setShowProfile: (v: boolean) => void
   setShowShortcuts: (v: boolean) => void
