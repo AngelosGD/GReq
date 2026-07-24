@@ -25,12 +25,9 @@ import type { MockApiItem } from './mockApi/types'
 import { Canvas } from './Canvas'
 import { ContextMenu } from './ContextMenu'
 import { ConfigPanel } from './ConfigPanel'
-import { ProfileModal } from './ProfileModal'
 import { signOut } from '../lib/appwrite'
 import { useAuthStore } from '../store/authStore'
 import { saveHistoryEntry } from '../lib/database'
-import { HistoryModal } from './HistoryModal'
-import { GroupDeleteModal } from './GroupDeleteModal'
 import { AiChat } from './AiChat'
 import { GitHubSection } from './GitHubSection'
 import { EnvPanel } from './EnvPanel'
@@ -39,7 +36,7 @@ import { ExportCodePanel } from './ExportCodePanel'
 import { loadCollections, saveCollections, type Collection } from '../lib/collections'
 import { TopBar } from './TopBar'
 import { Sidebar } from './Sidebar'
-import { ShortcutsModal } from './ShortcutsModal'
+import { MainModals } from './MainModals'
 
 type SidebarMode = 'options' | 'nodes'
 
@@ -488,6 +485,28 @@ export function MainApp() {
     [],
   )
 
+  const handleRetomarHistory = useCallback((entry: { nodes: Node[]; edges: Edge[] }) => {
+    setNodes((nds) => [...nds, ...entry.nodes.map((n) => ({ ...n, selected: false } as Node))])
+    setEdges((eds) => [...eds, ...entry.edges])
+    setShowHistory(false)
+  }, [setNodes, setEdges, setShowHistory])
+
+  const handleDeleteGroup = useCallback(() => {
+    if (!groupDeleteInfo) return
+    performDelete(groupDeleteInfo.node, true)
+    setGroupDeleteInfo(null)
+  }, [groupDeleteInfo, performDelete, setGroupDeleteInfo])
+
+  const handleDeleteNode = useCallback(() => {
+    if (!groupDeleteInfo) return
+    performDelete(groupDeleteInfo.node, false)
+    setGroupDeleteInfo(null)
+  }, [groupDeleteInfo, performDelete, setGroupDeleteInfo])
+
+  const handleCancelGroupDelete = useCallback(() => {
+    setGroupDeleteInfo(null)
+  }, [setGroupDeleteInfo])
+
   const onSignOut = useCallback(async () => {
     await signOut()
     localStorage.removeItem('greq-github-token')
@@ -743,36 +762,19 @@ export function MainApp() {
         </div>
       </div>
 
-      {showHistory && (
-        <HistoryModal
-          onClose={() => setShowHistory(false)}
-          onRetomar={(entry) => {
-            setNodes((nds) => [...nds, ...entry.nodes.map((n) => ({ ...n, selected: false } as Node))])
-            setEdges((eds) => [...eds, ...entry.edges])
-            setShowHistory(false)
-          }}
-        />
-      )}
-
-      {groupDeleteInfo && (
-        <GroupDeleteModal
-          node={groupDeleteInfo.node}
-          methods={groupDeleteInfo.methods}
-          onDeleteGroup={() => {
-            performDelete(groupDeleteInfo.node, true)
-            setGroupDeleteInfo(null)
-          }}
-          onDeleteNode={() => {
-            performDelete(groupDeleteInfo.node, false)
-            setGroupDeleteInfo(null)
-          }}
-          onCancel={() => setGroupDeleteInfo(null)}
-        />
-      )}
-
-      {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
-
-      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      <MainModals
+        showHistory={showHistory}
+        onCloseHistory={() => setShowHistory(false)}
+        onRetomarHistory={handleRetomarHistory}
+        groupDeleteInfo={groupDeleteInfo}
+        onDeleteGroup={handleDeleteGroup}
+        onDeleteNode={handleDeleteNode}
+        onCancelGroupDelete={handleCancelGroupDelete}
+        showProfile={showProfile}
+        onCloseProfile={() => setShowProfile(false)}
+        showShortcuts={showShortcuts}
+        onCloseShortcuts={() => setShowShortcuts(false)}
+      />
     </ReactFlowProvider>
   )
 }
