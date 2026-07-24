@@ -481,9 +481,9 @@ export function MainApp() {
   const toggleEnvPanel = useCallback(() => setShowEnvPanel((v) => !v), [])
 
   const handleNodeContext = useCallback(
-    (_e: React.MouseEvent, node: Node) => {
+    (e: React.MouseEvent, node: Node) => {
       setSelectedNode(node)
-      setCtxMenu({ x: _e.clientX, y: _e.clientY, node })
+      setCtxMenu({ x: e.clientX, y: e.clientY, node })
     },
     [],
   )
