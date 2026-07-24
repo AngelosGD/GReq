@@ -7,10 +7,25 @@ export interface Collection {
   collapsed: boolean
 }
 
+function isValidCollection(v: unknown): v is Collection {
+  if (!v || typeof v !== 'object') return false
+  const c = v as Record<string, unknown>
+  return typeof c.id === 'string'
+    && typeof c.name === 'string'
+    && Array.isArray(c.nodeIds) && c.nodeIds.every((id: unknown) => typeof id === 'string')
+    && typeof c.collapsed === 'boolean'
+}
+
 export function loadCollections(): Collection[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed) || !parsed.every(isValidCollection)) {
+      localStorage.removeItem(STORAGE_KEY)
+      return []
+    }
+    return parsed as Collection[]
   } catch { return [] }
 }
 
