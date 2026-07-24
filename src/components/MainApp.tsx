@@ -478,6 +478,16 @@ export function MainApp() {
     }))
   }, [nodes, edges, setNodes, takeSnapshot])
 
+  const toggleEnvPanel = useCallback(() => setShowEnvPanel((v) => !v), [])
+
+  const handleNodeContext = useCallback(
+    (_e: React.MouseEvent, node: Node) => {
+      setSelectedNode(node)
+      setCtxMenu({ x: _e.clientX, y: _e.clientY, node })
+    },
+    [],
+  )
+
   const onSignOut = useCallback(async () => {
     await signOut()
     localStorage.removeItem('greq-github-token')
@@ -503,7 +513,7 @@ export function MainApp() {
           onSignOut={onSignOut}
           setShowProfile={setShowProfile}
           setShowShortcuts={setShowShortcuts}
-          onToggleEnvPanel={() => setShowEnvPanel((v) => !v)}
+          onToggleEnvPanel={toggleEnvPanel}
           nodes={nodes}
           edges={edges}
         />
@@ -675,10 +685,7 @@ export function MainApp() {
                   onConnect={onConnect}
                   addNodeToCanvas={addNodeToCanvas}
                   onNodeSelect={setSelectedNode}
-                  onNodeContext={(_e: React.MouseEvent, node: Node) => {
-                    setSelectedNode(node)
-                    setCtxMenu({ x: _e.clientX, y: _e.clientY, node })
-                  }}
+                  onNodeContext={handleNodeContext}
                   focusNodeRef={focusNodeRef}
                 />
 
