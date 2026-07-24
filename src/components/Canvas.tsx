@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from 'react'
+import { useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   ReactFlow,
   Background,
@@ -6,6 +6,9 @@ import {
   useReactFlow,
   type Node,
   type Edge,
+  BaseEdge,
+  getSmoothStepPath,
+  type ConnectionLineComponentProps,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { nodeTypes } from './nodes'
@@ -23,10 +26,27 @@ interface CanvasProps {
   focusNodeRef?: React.MutableRefObject<((nodeId: string) => void) | null>
 }
 
+function ConnectionLine({ fromX, fromY, toX, toY, fromPosition, toPosition }: ConnectionLineComponentProps) {
+  const [path] = getSmoothStepPath({ sourceX: fromX, sourceY: fromY, targetX: toX, targetY: toY, sourcePosition: fromPosition, targetPosition: toPosition })
+  return <BaseEdge path={path} style={{ stroke: '#10b981', strokeWidth: 1.5, strokeDasharray: '4 4' }} />
+}
+
 export function Canvas({
   nodes, edges, onNodesChange, onEdgesChange, onConnect,
   addNodeToCanvas, onNodeSelect, onNodeContext, focusNodeRef,
 }: CanvasProps) {
+  const nodeTypeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n.type])), [nodes])
+  const isValidConnection = useCallback(
+    (connection: { source: string | null; target: string | null }) => {
+      const sourceType = connection.source ? nodeTypeMap.get(connection.source) : undefined
+      const targetType = connection.target ? nodeTypeMap.get(connection.target) : undefined
+      if (!sourceType || !targetType) return false
+      if (sourceType === 'url' && targetType === 'method') return true
+      if (sourceType === 'method' && targetType === 'method') return true
+      return false
+    },
+    [nodeTypeMap],
+  )
   const { screenToFlowPosition, setCenter } = useReactFlow()
   const addRef = useRef(addNodeToCanvas)
   addRef.current = addNodeToCanvas
@@ -101,6 +121,8 @@ export function Canvas({
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       defaultEdgeOptions={{ type: 'animated' }}
+      connectionLineComponent={ConnectionLine}
+      isValidConnection={isValidConnection}
       zoomOnScroll={true}
       zoomOnPinch={true}
       panOnDrag={true}
